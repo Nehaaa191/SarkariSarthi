@@ -16,6 +16,7 @@ function DashboardMockup() {
           <span className="db-search-placeholder">Search policies and schemes...</span>
         </div>
         <div className="db-topbar-right">
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Preview</span>
           <span className="db-lang">En</span>
           <div className="db-avatar">AK</div>
         </div>
@@ -49,7 +50,7 @@ function DashboardMockup() {
 
         {/* Main content */}
         <div className="db-main">
-          <div className="db-breadcrumb">Policy Reader</div>
+          <div className="db-breadcrumb">Policy Reader (Illustrative Mockup)</div>
           <div className="db-doc-header">
             <div>
               <h3 className="db-doc-title">Central Sector Scholarship</h3>
@@ -69,7 +70,7 @@ function DashboardMockup() {
           <div className="db-content-area">
             {/* Document preview */}
             <div className="db-doc-preview">
-              <div className="db-doc-page-label">Page 1 of 3</div>
+              <div className="db-doc-page-label">Sample Preview</div>
               <div className="db-doc-ministry">MINISTRY OF EDUCATION</div>
               <div className="db-doc-heading">Central Sector Scheme of Scholarship</div>
               <div className="db-doc-sub">Equity and merit-driven</div>
@@ -94,7 +95,7 @@ function DashboardMockup() {
               <div className="db-ai-suggestion">Explain the income requirements in simple.</div>
               <div className="db-ai-response">
                 The income limit for families applying is ₹8 lakh per annum. You'll need to provide an income certificate.
-                <div className="db-ai-ref"><FileText size={10} /> Sourced Page 4 (point 3.2)</div>
+                <div className="db-ai-ref"><FileText size={10} /> Official Guidelines Reference</div>
               </div>
               <div className="db-ai-suggested">
                 <div className="db-ai-sug-q">What documents do I need?</div>

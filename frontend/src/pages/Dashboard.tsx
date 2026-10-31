@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import {
   Sparkles, BookOpen, UserCheck, Shield,
-  Star, ArrowRight, Clock, TrendingUp
+  Star, ArrowRight, Clock
 } from 'lucide-react';
 import './Dashboard.css';
 
@@ -19,17 +19,13 @@ const schemeNames: Record<string, string> = {
 };
 
 const quickActions = [
-  { icon: <Sparkles size={20} />, label: 'Ask Saathi AI', sub: 'Chat about any scheme', href: '/chat', color: '#4F46E5' },
-  { icon: <UserCheck size={20} />, label: 'Check Eligibility', sub: 'Find matching schemes', href: '/eligibility', color: '#10B981' },
-  { icon: <Shield size={20} />, label: 'Verify a Claim', sub: 'Fact-check forwards', href: '/verify', color: '#EF4444' },
-  { icon: <BookOpen size={20} />, label: 'Browse Schemes', sub: '8 official schemes', href: '/schemes', color: '#D97706' },
+  { icon: <Sparkles size={20} />, label: 'Ask Saathi AI', sub: 'Chat about any scheme', href: '/chat', color: '#172554' },
+  { icon: <UserCheck size={20} />, label: 'Check Eligibility', sub: 'Find matching schemes', href: '/eligibility', color: '#172554' },
+  { icon: <Shield size={20} />, label: 'Verify a Claim', sub: 'Fact-check forwards', href: '/verify', color: '#172554' },
+  { icon: <BookOpen size={20} />, label: 'Browse Schemes', sub: '8 official schemes', href: '/schemes', color: '#E89A36' },
 ];
 
-const recentActivity = [
-  { text: 'Checked eligibility for PM-KISAN', time: 'Just now', icon: <UserCheck size={14} /> },
-  { text: 'Asked about Central Sector Scholarship', time: '10 min ago', icon: <Sparkles size={14} /> },
-  { text: 'Verified: "₹12,000 PM-KISAN claim"', time: '1 hr ago', icon: <Shield size={14} /> },
-];
+const recentActivity: Array<{ text: string; time: string; icon: React.ReactNode }> = [];
 
 export default function Dashboard() {
   return (
@@ -94,36 +90,24 @@ export default function Dashboard() {
             <div className="dash-section-header">
               <h2 className="dash-section-title">Recent Activity</h2>
             </div>
-            <div className="dash-activity-list">
-              {recentActivity.map((a, i) => (
-                <div key={i} className="dash-activity-item">
-                  <div className="dai-icon">{a.icon}</div>
-                  <div className="dai-text">{a.text}</div>
-                  <div className="dai-time"><Clock size={11} /> {a.time}</div>
-                </div>
-              ))}
-            </div>
+            {recentActivity.length === 0 ? (
+              <div className="dash-empty-state">
+                <Clock size={28} />
+                <p>No recent activity yet. Your interactions will appear here as you explore schemes.</p>
+              </div>
+            ) : (
+              <div className="dash-activity-list">
+                {recentActivity.map((a, i) => (
+                  <div key={i} className="dash-activity-item">
+                    <div className="dai-icon">{a.icon}</div>
+                    <div className="dai-text">{a.text}</div>
+                    <div className="dai-time"><Clock size={11} /> {a.time}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
-
-        {/* Stats */}
-        <section className="dash-section">
-          <h2 className="dash-section-title">Platform Overview</h2>
-          <div className="dash-stats-grid">
-            {[
-              { label: 'Schemes Available', val: '8', icon: <BookOpen size={18} />, color: '#4F46E5' },
-              { label: 'Citizens Helped', val: '2.4L+', icon: <TrendingUp size={18} />, color: '#10B981' },
-              { label: 'Claims Verified', val: '12,000+', icon: <Shield size={18} />, color: '#D97706' },
-              { label: 'Languages', val: '2 (EN/HI)', icon: <Sparkles size={18} />, color: '#7C3AED' },
-            ].map((s, i) => (
-              <div key={i} className="dash-stat-card">
-                <div className="dsc-icon" style={{ color: s.color }}>{s.icon}</div>
-                <div className="dsc-val">{s.val}</div>
-                <div className="dsc-label">{s.label}</div>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
     </div>
   );

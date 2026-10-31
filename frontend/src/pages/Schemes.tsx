@@ -31,7 +31,7 @@ const SCHEMES: Scheme[] = [
     portal: 'scholarships.gov.in',
     portalUrl: 'https://scholarships.gov.in',
     tags: ['scholarship', 'student', 'education', 'merit'],
-    color: '#4F46E5',
+    color: '#172554',
   },
   {
     id: 'pmkisan',
@@ -45,7 +45,7 @@ const SCHEMES: Scheme[] = [
     portal: 'pmkisan.gov.in',
     portalUrl: 'https://pmkisan.gov.in',
     tags: ['farmer', 'agriculture', 'income support', 'rural'],
-    color: '#10B981',
+    color: '#172554',
   },
   {
     id: 'pmjay',
@@ -59,7 +59,7 @@ const SCHEMES: Scheme[] = [
     portal: 'pmjay.gov.in',
     portalUrl: 'https://pmjay.gov.in',
     tags: ['health', 'insurance', 'hospital', 'BPL'],
-    color: '#EF4444',
+    color: '#172554',
   },
   {
     id: 'pmay',
@@ -73,7 +73,7 @@ const SCHEMES: Scheme[] = [
     portal: 'pmaymis.gov.in',
     portalUrl: 'https://pmaymis.gov.in',
     tags: ['housing', 'home loan', 'subsidy', 'urban'],
-    color: '#D97706',
+    color: '#172554',
   },
   {
     id: 'mudra',
@@ -87,7 +87,7 @@ const SCHEMES: Scheme[] = [
     portal: 'mudra.org.in',
     portalUrl: 'https://mudra.org.in',
     tags: ['business', 'loan', 'entrepreneur', 'finance'],
-    color: '#7C3AED',
+    color: '#172554',
   },
   {
     id: 'pmmvy',
@@ -101,7 +101,7 @@ const SCHEMES: Scheme[] = [
     portal: 'wcd.nic.in',
     portalUrl: 'https://wcd.nic.in',
     tags: ['women', 'maternity', 'child', 'health'],
-    color: '#EC4899',
+    color: '#172554',
   },
   {
     id: 'ssy',
@@ -115,7 +115,7 @@ const SCHEMES: Scheme[] = [
     portal: 'indiapost.gov.in',
     portalUrl: 'https://www.indiapost.gov.in',
     tags: ['girl', 'savings', 'education', 'beti bachao'],
-    color: '#F59E0B',
+    color: '#172554',
   },
   {
     id: 'nsp-sc',
@@ -123,13 +123,13 @@ const SCHEMES: Scheme[] = [
     ministry: 'Multiple Ministries',
     category: 'Education',
     amount: 'Varies by scheme',
-    beneficiaries: 'Crores of students',
+    beneficiaries: 'Varies by scheme (Unverified)',
     description: 'Pre-matric and post-matric scholarships for SC, ST, OBC and minority students at all levels of education.',
     eligibilityHighlights: ['SC/ST/OBC/Minority student', 'Income limits apply', 'Pre & post-matric', 'Apply via NSP portal'],
     portal: 'scholarships.gov.in',
     portalUrl: 'https://scholarships.gov.in',
     tags: ['scholarship', 'SC', 'ST', 'OBC', 'minority'],
-    color: '#0EA5E9',
+    color: '#172554',
   },
 ];
 

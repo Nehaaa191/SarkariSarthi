@@ -101,7 +101,7 @@ const icons = [
   <FileCheck size={20} key="4" />,
 ];
 
-const iconColors = ['#4F46E5', '#D97706', '#7C3AED', '#2563EB', '#D97706'];
+const iconColors = ['#172554', '#E89A36', '#172554', '#172554', '#E89A36'];
 
 export default function Features() {
   const { t } = useI18n();

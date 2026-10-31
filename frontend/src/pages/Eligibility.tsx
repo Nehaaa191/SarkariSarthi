@@ -20,7 +20,6 @@ interface ProfileData {
 interface SchemeResult {
   name: string;
   status: 'eligible' | 'not_eligible' | 'insufficient_info' | 'possible';
-  score: number;
   matched: string[];
   missing: string[];
   amount?: string;
@@ -48,7 +47,6 @@ function evaluateSchemes(p: ProfileData): SchemeResult[] {
     results.push({
       name: 'Central Sector Scholarship (CSSS)',
       status: missing.length > 1 ? 'insufficient_info' : eligible ? 'eligible' : 'not_eligible',
-      score: Math.round((matched.length / (matched.length + missing.length)) * 100) || 50,
       matched, missing,
       amount: '₹10,000 – ₹20,000/year',
       portal: 'scholarships.gov.in',
@@ -70,7 +68,6 @@ function evaluateSchemes(p: ProfileData): SchemeResult[] {
     results.push({
       name: 'PM-KISAN (₹6,000/year)',
       status: missing.length > 1 ? 'insufficient_info' : eligible ? 'eligible' : (land > 2 ? 'not_eligible' : 'possible'),
-      score: Math.round((matched.length / (matched.length + missing.length)) * 100) || 40,
       matched, missing,
       amount: '₹6,000/year (₹2,000 × 3 instalments)',
       portal: 'pmkisan.gov.in',
@@ -90,7 +87,6 @@ function evaluateSchemes(p: ProfileData): SchemeResult[] {
     results.push({
       name: 'Ayushman Bharat PM-JAY',
       status,
-      score: Math.max(30, Math.round((matched.length / 3) * 100)),
       matched, missing,
       amount: '₹5 lakh health cover/family/year',
       portal: 'pmjay.gov.in',
@@ -103,7 +99,6 @@ function evaluateSchemes(p: ProfileData): SchemeResult[] {
     results.push({
       name: 'PM Mudra Yojana (Business Loan)',
       status: 'eligible',
-      score: 85,
       matched: ['Non-farm business activity', 'Small business eligible'],
       missing: [],
       amount: 'Up to ₹10 lakh loan',
@@ -117,7 +112,6 @@ function evaluateSchemes(p: ProfileData): SchemeResult[] {
     results.push({
       name: 'PM Matru Vandana Yojana (PMMVY)',
       status: 'eligible',
-      score: 95,
       matched: ['Female applicant', 'First child', 'Age ≥ 19 years'],
       missing: [],
       amount: '₹5,000 (in 3 instalments)',
@@ -126,7 +120,8 @@ function evaluateSchemes(p: ProfileData): SchemeResult[] {
     });
   }
 
-  return results.sort((a, b) => b.score - a.score);
+  const order = { eligible: 0, possible: 1, insufficient_info: 2, not_eligible: 3 };
+  return results.sort((a, b) => order[a.status] - order[b.status]);
 }
 
 const questions = [
@@ -163,13 +158,12 @@ export default function Eligibility() {
     setProfile(p => ({ ...p, [id]: val }));
   };
 
-  const check = async () => {
+  const check = () => {
     if (!profile.age || !profile.gender || !profile.income) {
       alert('Please fill in Age, Gender, and Annual Income at minimum.');
       return;
     }
     setChecking(true);
-    await new Promise(r => setTimeout(r, 1200)); // simulate processing
     const r = evaluateSchemes(profile);
     setResults(r);
     setChecking(false);
@@ -287,15 +281,6 @@ export default function Eligibility() {
                       {r.amount && <span className="erc-amount">{r.amount}</span>}
                     </div>
                     <div className="erc-body">
-                      {/* Score bar */}
-                      <div className="erc-score-row">
-                        <span className="erc-score-label">Match score</span>
-                        <span className="erc-score-val">{r.score}%</span>
-                      </div>
-                      <div className="erc-progress">
-                        <div className="erc-progress-fill" style={{ width: `${r.score}%`, background: cfg.color }} />
-                      </div>
-
                       {/* Criteria */}
                       <div className="erc-criteria">
                         {r.matched.map(m => (

@@ -13,7 +13,7 @@ function ChatPreview() {
         </div>
         <div>
           <div className="cp-title">Saathi AI</div>
-          <div className="cp-sub">● Source: Tracked</div>
+          <div className="cp-sub">● Illustrative Preview</div>
         </div>
         <div className="cp-dots"><span/><span/><span/></div>
       </div>
@@ -22,7 +22,7 @@ function ChatPreview() {
       <div className="cp-body">
         <div className="cp-source-badge">
           <CheckCircle2 size={12} />
-          <span>Official sources · Only official cited</span>
+          <span>Sample Interaction · Grounded in official schemes</span>
         </div>
 
         {/* User message */}
@@ -48,16 +48,13 @@ function ChatPreview() {
           <ArrowRight size={14} className="cp-pdf-arrow" />
         </div>
 
-        {/* Match bar */}
+        {/* Criteria status */}
         <div className="cp-match">
           <div className="cp-match-label">
             <CheckCircle2 size={12} className="cp-match-icon" />
-            <span>Potential match</span>
+            <span>Criteria Assessment</span>
           </div>
-          <span className="cp-match-count">3 of 4</span>
-        </div>
-        <div className="cp-progress-bar">
-          <div className="cp-progress-fill" style={{ width: '75%' }} />
+          <span className="cp-match-count">Sample</span>
         </div>
 
         {/* Criteria chips */}

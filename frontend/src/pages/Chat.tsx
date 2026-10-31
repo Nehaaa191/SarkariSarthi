@@ -381,17 +381,9 @@ export default function Chat() {
 
       const reply = await callGeminiAPI([...history, { role: 'user', content }], apiKey);
 
-      // Extract sources from known schemes mentioned
-      const sources: Source[] = [];
-      if (/scholarship|csss/i.test(reply)) sources.push({ id: 's1', title: 'Scholarship Guidelines 2024-25', ministry: 'MoE', url: 'https://scholarships.gov.in', page: '4' });
-      if (/kisan|pmkisan/i.test(reply)) sources.push({ id: 's2', title: 'PM-KISAN Guidelines', ministry: 'MoAFW', url: 'https://pmkisan.gov.in' });
-      if (/ayushman|pmjay/i.test(reply)) sources.push({ id: 's3', title: 'Ayushman Bharat PM-JAY', ministry: 'MoHFW', url: 'https://pmjay.gov.in' });
-      if (/mudra/i.test(reply)) sources.push({ id: 's4', title: 'PM Mudra Yojana', ministry: 'MoF', url: 'https://mudra.org.in' });
-      if (/awas|pmay/i.test(reply)) sources.push({ id: 's5', title: 'PM Awas Yojana', ministry: 'MoHUA', url: 'https://pmaymis.gov.in' });
-
       setMessages(prev => prev.map(m =>
         m.id === loadingMsg.id
-          ? { ...m, content: reply, sources, loading: false }
+          ? { ...m, content: reply, loading: false }
           : m
       ));
     } catch (err: any) {
@@ -494,7 +486,7 @@ export default function Chat() {
             <Sparkles size={18} className="chat-header-icon" />
             <div>
               <div className="chat-header-title">Ask Saathi</div>
-              <div className="chat-header-sub">● Source: Tracked · Gemini AI</div>
+              <div className="chat-header-sub">● Powered by Gemini AI</div>
             </div>
           </div>
           <div className="chat-header-actions">
