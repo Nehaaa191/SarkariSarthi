@@ -1,0 +1,142 @@
+.cta-section {
+  padding: 80px 24px;
+  background: var(--navy-dark);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle grid overlay */
+.cta-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.cta-layout {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 60px;
+  position: relative;
+  z-index: 1;
+}
+
+/* LEFT */
+.cta-heading {
+  font-size: clamp(32px, 4.5vw, 52px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.03em;
+  margin-bottom: 18px;
+  line-height: 1.15;
+}
+
+.cta-sub {
+  font-size: 16px;
+  color: rgba(255,255,255,0.65);
+  line-height: 1.75;
+  margin-bottom: 36px;
+  max-width: 460px;
+}
+
+.cta-btn {
+  padding: 16px 36px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* RIGHT - Orb */
+.cta-right {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cta-orb-wrap {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Animated rings */
+.cta-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.08);
+  animation: pulse-ring 3s ease-in-out infinite;
+}
+
+.cta-ring-1 {
+  width: 200px;
+  height: 200px;
+  animation-delay: 0s;
+}
+
+.cta-ring-2 {
+  width: 260px;
+  height: 260px;
+  animation-delay: 0.8s;
+}
+
+/* Orb itself */
+.cta-orb {
+  width: 90px;
+  height: 90px;
+  background: var(--gold);
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 40px rgba(245,197,24,0.4), 0 0 80px rgba(245,197,24,0.15);
+}
+
+.cta-orb-icon {
+  font-size: 36px;
+  color: var(--navy-dark);
+}
+
+/* Floating tags */
+.cta-tag {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cta-tag-1 {
+  top: 30px;
+  right: -20px;
+  animation: float 3s 0.5s ease-in-out infinite;
+}
+
+.cta-tag-2 {
+  bottom: 50px;
+  right: 10px;
+  animation: float 3s 1.2s ease-in-out infinite;
+}
+
+@media (max-width: 800px) {
+  .cta-layout { grid-template-columns: 1fr; gap: 48px; }
+  .cta-right { display: none; }
+}

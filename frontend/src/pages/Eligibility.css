@@ -1,0 +1,309 @@
+.elig-page {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.elig-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.elig-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.elig-back:hover { color: var(--navy); }
+
+.elig-topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.elig-home-link {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.elig-home-link:hover { color: var(--navy); }
+
+.elig-content {
+  flex: 1;
+  padding: 48px 24px;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* FORM */
+.elig-form-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.elig-h1 {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--navy);
+  margin-bottom: 10px;
+}
+
+.elig-sub {
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.elig-form { display: flex; flex-direction: column; gap: 24px; }
+
+.elig-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.elig-field { display: flex; flex-direction: column; gap: 6px; }
+
+.elig-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.req { color: #EF4444; }
+
+.elig-input, .elig-select {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  background: #fff;
+  transition: border-color var(--transition);
+}
+
+.elig-input:focus, .elig-select:focus { border-color: var(--navy); outline: none; }
+
+.elig-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font-body);
+}
+
+.elig-submit-btn:hover:not(:disabled) { background: var(--navy-mid); }
+.elig-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* RESULTS */
+.elig-results-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.elig-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: all var(--transition);
+  font-family: var(--font-body);
+}
+
+.elig-back-btn:hover { color: var(--navy); border-color: var(--navy); }
+
+.elig-results-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.elig-results-sub { font-size: 14px; color: var(--text-secondary); }
+
+.elig-summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.elig-summary-card {
+  border: 1px solid;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.elig-summary-count { font-size: 28px; font-weight: 800; }
+.elig-summary-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+
+.elig-results-list { display: flex; flex-direction: column; gap: 16px; }
+
+.elig-result-card {
+  border: 1.5px solid;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: #fff;
+  transition: all var(--transition-slow);
+}
+
+.elig-result-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+.erc-header {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.erc-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.erc-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--navy);
+  flex: 1;
+}
+
+.erc-amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.erc-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+
+.erc-score-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.erc-score-val { color: var(--navy); font-weight: 800; }
+
+.erc-progress {
+  height: 6px;
+  background: var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.erc-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.8s ease;
+}
+
+.erc-criteria {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.erc-criterion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.erc-criterion.matched { background: #F0FDF4; color: #166534; }
+.erc-criterion.missing { background: #FFFBEB; color: #92400E; }
+
+.erc-portal-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--navy);
+  color: #fff;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  width: fit-content;
+  transition: all var(--transition);
+}
+
+.erc-portal-btn:hover { background: var(--navy-mid); }
+
+.elig-no-results {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.elig-disclaimer {
+  margin-top: 24px;
+  padding: 14px 18px;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: #92400E;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .elig-fields { grid-template-columns: 1fr; }
+  .elig-summary-row { grid-template-columns: 1fr 1fr; }
+}
