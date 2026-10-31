@@ -37,116 +37,36 @@ interface EligResult {
   explanation?: string;
 }
 
-// ─── Scheme data (MVP hand-curated) ───────────────────────────────
-const SCHEMES_CONTEXT = `
-You are Saathi AI — an expert on Indian government schemes. 
-Always cite official sources. Be helpful, clear, and honest.
-If you don't know or data is unavailable, say so.
-Use Hindi words naturally where helpful (e.g., "prakriya" for process).
+// ─── Call AI API via Flask Backend (Groq) ───────────────────────────
+async function callChatAPI(messages: Array<{ role: string; content: string }>): Promise<string> {
+  const endpoints = ['/api/chat', 'http://127.0.0.1:5000/api/chat', 'http://localhost:5000/api/chat'];
+  let lastError: Error | null = null;
 
-SCHEME DATA (use this as primary reference):
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages })
+      });
 
-1. CENTRAL SECTOR SCHEME OF SCHOLARSHIP (CSSS)
-   Ministry: Ministry of Education
-   Amount: ₹10,000/year (UG), ₹20,000/year (PG)
-   Eligibility: Scored above 80th percentile in class 12, family income ≤ ₹8 lakh/year, 
-   first-year UG student, age ≤ 25 years, not benefiting from another scholarship
-   Documents: Aadhar, income certificate, marksheet, bank details, caste cert (if SC/ST/OBC)
-   Apply: National Scholarship Portal (scholarships.gov.in)
-   Source: scholarships.gov.in, Ministry of Education Guidelines 2024-25
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || `Server error (${res.status})`);
+      }
 
-2. PM-KISAN (Pradhan Mantri Kisan Samman Nidhi)
-   Ministry: Ministry of Agriculture
-   Amount: ₹6,000/year (₹2,000 every 4 months)
-   Eligibility: Small/marginal farmers owning ≤ 2 hectares land, Indian citizen
-   Exclusions: Income tax payers, constitutional post holders, professionals (doctors, engineers, lawyers)
-   Apply: pmkisan.gov.in or nearest CSC/bank
-   Source: pmkisan.gov.in, Agricultural Ministry Guidelines
-
-3. AYUSHMAN BHARAT - PM-JAY
-   Ministry: Ministry of Health & Family Welfare
-   Amount: ₹5 lakh health cover per family per year
-   Eligibility: Listed in SECC 2011 database, BPL families, specific occupational groups
-   Covers: 1,929+ medical procedures, pre and post hospitalization
-   Apply: Ayushman card at empanelled hospital or CSC, pmjay.gov.in
-   Source: pmjay.gov.in, NHA Guidelines
-
-4. PM AWAS YOJANA (PMAY) - Urban
-   Ministry: Ministry of Housing and Urban Affairs  
-   Amount: Subsidy up to ₹2.67 lakh (EWS/LIG), interest subsidy on home loans
-   Eligibility: EWS: income ≤ ₹3 lakh/year; LIG: ₹3-6 lakh/year; MIG-I: ₹6-12 lakh/year
-   Must not own pucca house anywhere in India
-   Source: pmaymis.gov.in
-
-5. BETI BACHAO BETI PADHAO
-   Ministry: Ministry of Women & Child Development
-   Focus: Girl child education and welfare
-   Scheme: Sukanya Samriddhi Yojana (SSY) - savings scheme for girl child
-   SSY: Interest ~8.2%, deposit ₹250 to ₹1.5 lakh/year, maturity at age 21
-   Open at: Post office or authorized bank for girls below 10 years
-   Source: wcd.nic.in
-
-6. PRADHAN MANTRI MUDRA YOJANA (PMMY)
-   Ministry: Ministry of Finance
-   Loans: Shishu (up to ₹50,000), Kishor (₹50,000-5 lakh), Tarun (₹5-10 lakh)
-   Eligibility: Non-farm income-generating activities, small businesses
-   Apply: Any bank, NBFC, or MFI
-   Source: mudra.org.in
-
-7. PM MATRU VANDANA YOJANA (PMMVY)
-   Ministry: Ministry of Women & Child Development
-   Amount: ₹5,000 for first live birth (in 3 instalments)
-   Eligibility: Pregnant and lactating women aged 19+, for first child
-   Apply: Nearest health sub-centre or Anganwadi
-   Source: wcd.nic.in/PMMVY
-
-8. NATIONAL SCHOLARSHIP PORTAL (NSP) - various SC/ST/OBC schemes
-   Manages: Pre-matric, post-matric scholarships for minorities, SC, ST, OBC, differently abled
-   Apply: scholarships.gov.in
-   Key deadline: Usually Oct-Nov each year
-
-RULES:
-- For eligibility questions, ask the user for profile data if not provided (age, income, occupation, state, category)
-- Always cite the source scheme name and official portal
-- If a claim seems wrong, say so with the actual rule
-- For Hindi questions, respond in Hindi
-- Format responses clearly with bullet points when listing criteria
-`;
-
-// ─── Call AI API ──────────────────────────────────────────────────
-async function callGeminiAPI(messages: Array<{ role: string; content: string }>, apiKey: string): Promise<string> {
-  const systemMsg = { role: 'user', parts: [{ text: SCHEMES_CONTEXT }] };
-  const historyParts = messages.slice(0, -1).map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }]
-  }));
-  const lastMsg = messages[messages.length - 1];
-
-  const body = {
-    contents: [
-      systemMsg,
-      { role: 'model', parts: [{ text: 'Understood. I am Saathi AI, ready to help with government schemes.' }] },
-      ...historyParts,
-      { role: 'user', parts: [{ text: lastMsg.content }] }
-    ],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 1024,
+      const data = await res.json();
+      return data?.response || 'No response received.';
+    } catch (err: any) {
+      lastError = err;
+      if (err.name === 'TypeError' || err.message?.includes('Failed to fetch')) {
+        continue;
+      }
+      throw err;
     }
-  };
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-  );
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `API error ${res.status}`);
   }
 
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response received.';
+  throw lastError || new Error('Could not connect to SarkariSaathi backend server. Please ensure the backend is running.');
 }
 
 // Eligibility rule engine for quick schemes
@@ -326,8 +246,6 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
-  const [showApiKeyModal, setShowApiKeyModal] = useState(!localStorage.getItem('gemini_api_key'));
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -342,16 +260,9 @@ export default function Chat() {
     }
   }, []);
 
-  const saveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem('gemini_api_key', key);
-    setShowApiKeyModal(false);
-  };
-
   const sendMessage = async (text?: string) => {
     const content = (text || input).trim();
     if (!content || loading) return;
-    if (!apiKey) { setShowApiKeyModal(true); return; }
 
     setInput('');
 
@@ -379,7 +290,7 @@ export default function Chat() {
         content: m.content,
       }));
 
-      const reply = await callGeminiAPI([...history, { role: 'user', content }], apiKey);
+      const reply = await callChatAPI([...history, { role: 'user', content }]);
 
       setMessages(prev => prev.map(m =>
         m.id === loadingMsg.id
@@ -391,7 +302,7 @@ export default function Chat() {
         m.id === loadingMsg.id
           ? {
             ...m,
-            content: `I encountered an error: ${err.message}. Please check your API key and try again.`,
+            content: `I encountered an error: ${err.message}. Please try again in a moment.`,
             loading: false,
           }
           : m
@@ -486,7 +397,9 @@ export default function Chat() {
             <Sparkles size={18} className="chat-header-icon" />
             <div>
               <div className="chat-header-title">Ask Saathi</div>
-              <div className="chat-header-sub">● Powered by Gemini AI</div>
+
+              <div className="chat-header-sub">● Source: Tracked · Saathi AI</div>
+
             </div>
           </div>
           <div className="chat-header-actions">
@@ -495,9 +408,6 @@ export default function Chat() {
                 <VolumeX size={17} /> Stop
               </button>
             )}
-            <button className="chat-action-btn" onClick={() => setShowApiKeyModal(true)} id="api-key-btn">
-              API Key
-            </button>
             <Link to="/" className="chat-action-btn">
               <ArrowLeft size={17} /> Home
             </Link>
@@ -568,49 +478,6 @@ export default function Chat() {
           </p>
         </div>
       </div>
-
-      {/* API Key Modal */}
-      {showApiKeyModal && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="API Key setup">
-          <div className="modal-card">
-            <div className="modal-icon"><Sparkles size={24} /></div>
-            <h2 className="modal-title">Connect Gemini AI</h2>
-            <p className="modal-sub">
-              Enter your free Gemini API key to enable AI responses. Get one at{' '}
-              <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="modal-link">
-                aistudio.google.com
-              </a>
-            </p>
-            <ApiKeyForm onSave={saveApiKey} current={apiKey} onClose={() => apiKey && setShowApiKeyModal(false)} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ApiKeyForm({ onSave, current, onClose }: { onSave: (k: string) => void; current: string; onClose: () => void }) {
-  const [val, setVal] = useState(current);
-  return (
-    <div className="api-key-form">
-      <input
-        type="password"
-        className="api-key-input"
-        placeholder="AIza..."
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        id="api-key-input"
-        onKeyDown={e => e.key === 'Enter' && val.trim() && onSave(val.trim())}
-      />
-      <div className="api-key-actions">
-        {current && <button className="btn-secondary" onClick={onClose} id="api-key-cancel">Cancel</button>}
-        <button className="btn-primary" onClick={() => val.trim() && onSave(val.trim())} id="api-key-save" style={{ flex: 1 }}>
-          Save & Start
-        </button>
-      </div>
-      <p className="api-key-note">
-        Your key is stored only in your browser's localStorage. It never leaves your device except to call Google's API.
-      </p>
     </div>
   );
 }

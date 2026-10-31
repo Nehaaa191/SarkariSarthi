@@ -135,14 +135,13 @@ export default function Verify() {
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [, setHistory] = useState<VerifyResult[]>([]);
-  const apiKey = localStorage.getItem('gemini_api_key') || '';
 
   const verify = async (claim?: string) => {
     const text = (claim || input).trim();
     if (!text) return;
     setLoading(true);
     setResult(null);
-    const r = await verifyClaim(text, apiKey);
+    const r = await verifyClaim(text);
     setResult(r);
     setHistory(prev => [r, ...prev].slice(0, 5));
     setLoading(false);

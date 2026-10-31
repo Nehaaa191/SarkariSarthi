@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Globe, Menu, X } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import { useFeaturesDrawer } from '../context/FeaturesDrawerContext';
+import { useAuth } from '../context/AuthContext';
 import './Navbar.css';
 
 export default function Navbar() {
   const { t, lang, setLang } = useI18n();
   const { openDrawer } = useFeaturesDrawer();
+  const { user, isAuthenticated, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === '/';
@@ -18,6 +22,17 @@ export default function Navbar() {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const scrollTo = (id: string) => {
@@ -34,6 +49,16 @@ export default function Navbar() {
     setMobileOpen(false);
     openDrawer();
   };
+
+  const handleLogout = async () => {
+    setDropdownOpen(false);
+    setMobileOpen(false);
+    await logout();
+    navigate('/');
+  };
+
+  const userInitial = (user?.name?.[0] || user?.email?.[0] || user?.phone?.[0] || 'U').toUpperCase();
+  const userDisplay = user?.name || user?.email || user?.phone || 'Citizen';
 
   return (
     <nav className={`navbar ${scrolled ? 'scrolled' : ''}`} role="navigation" aria-label="Main navigation">
@@ -87,9 +112,55 @@ export default function Navbar() {
             <Globe size={15} />
             <span>{t.nav.langToggle}</span>
           </button>
-          <Link to="/dashboard" className="btn-nav-outline" id="nav-signin">
-            {t.nav.signIn}
-          </Link>
+
+          {isAuthenticated ? (
+            <div className="nav-user-dropdown-container" ref={dropdownRef}>
+              <button
+                className="nav-user-avatar-btn"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                aria-label="User menu"
+                aria-expanded={dropdownOpen}
+                id="nav-user-avatar"
+              >
+                {user?.avatar ? (
+                  <img src={user.avatar} alt={userDisplay} className="nav-user-avatar-img" />
+                ) : (
+                  <span>{userInitial}</span>
+                )}
+              </button>
+
+              {dropdownOpen && (
+                <div className="nav-user-dropdown-menu">
+                  <div className="nav-user-menu-header">
+                    <div className="nav-user-menu-name">{user?.name || 'Citizen'}</div>
+                    <div className="nav-user-menu-sub">{user?.email || user?.phone}</div>
+                  </div>
+                  <div className="nav-user-menu-divider" />
+                  <Link
+                    to="/dashboard"
+                    className="nav-user-menu-item"
+                    onClick={() => setDropdownOpen(false)}
+                    id="nav-dropdown-dashboard"
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    type="button"
+                    className="nav-user-menu-item nav-user-menu-signout"
+                    onClick={handleLogout}
+                    id="nav-dropdown-signout"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link to="/signin" className="btn-nav-outline" id="nav-signin">
+              {t.nav.signIn}
+            </Link>
+          )}
+
           <Link to="/chat" className="btn-nav-filled" id="nav-get-started">
             {t.nav.getStarted}
           </Link>
@@ -130,9 +201,48 @@ export default function Navbar() {
           >
             <Globe size={15} /> {t.nav.langToggle}
           </button>
-          <Link to="/dashboard" className="btn-nav-outline full-width" onClick={() => setMobileOpen(false)}>
-            {t.nav.signIn}
-          </Link>
+
+          {isAuthenticated ? (
+            <>
+              <div className="mobile-user-info">
+                <div className="nav-user-avatar-btn" style={{ width: 32, height: 32 }}>
+                  {user?.avatar ? (
+                    <img src={user.avatar} alt={userDisplay} className="nav-user-avatar-img" />
+                  ) : (
+                    <span>{userInitial}</span>
+                  )}
+                </div>
+                <div className="mobile-user-details">
+                  <div className="nav-user-menu-name">{user?.name || 'Citizen'}</div>
+                  <div className="nav-user-menu-sub">{user?.email || user?.phone}</div>
+                </div>
+              </div>
+              <Link
+                to="/dashboard"
+                className="btn-nav-outline full-width"
+                onClick={() => setMobileOpen(false)}
+              >
+                Dashboard
+              </Link>
+              <button
+                type="button"
+                className="btn-nav-outline full-width"
+                style={{ borderColor: 'var(--red)', color: 'var(--red)' }}
+                onClick={handleLogout}
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/signin"
+              className="btn-nav-outline full-width"
+              onClick={() => setMobileOpen(false)}
+            >
+              {t.nav.signIn}
+            </Link>
+          )}
+
           <Link to="/chat" className="btn-nav-filled full-width" onClick={() => setMobileOpen(false)}>
             {t.nav.getStarted}
           </Link>
@@ -141,3 +251,4 @@ export default function Navbar() {
     </nav>
   );
 }
+
