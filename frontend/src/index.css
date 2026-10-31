@@ -1,28 +1,32 @@
 /* ===== DESIGN TOKENS ===== */
 :root {
-  /* Colors */
-  --navy: #1B2060;
-  --navy-dark: #0D1545;
-  --navy-mid: #252B7E;
-  --gold: #F5C518;
-  --gold-dark: #D4A500;
-  --gold-light: #FEF3C7;
+  /* Colors - Cohesive 3-Accent Palette */
+  --navy: #172554;
+  --navy-dark: #0F172A;
+  --navy-mid: #1E3A8A;
+  --orange: #E89A36;
+  --orange-dark: #C97E24;
+  --yellow: #F5D77A;
+  --yellow-light: #FEF9E7;
+  --gold: #E89A36;
+  --gold-dark: #C97E24;
+  --gold-light: #FEF9E7;
   --cream: #FEF9EC;
   --cream-mid: #FDF4D8;
-  --bg: #F8F9FF;
+  --bg: #F8FAFC;
   --bg-white: #FFFFFF;
-  --purple: #7C3AED;
-  --purple-light: #EDE9FE;
-  --teal: #0EA5E9;
+  --purple: #172554;
+  --purple-light: #F1F5F9;
+  --teal: #172554;
   --green: #10B981;
   --green-light: #D1FAE5;
   --red: #EF4444;
 
   /* Text */
-  --text-primary: #1B2060;
+  --text-primary: #172554;
   --text-secondary: #64748B;
   --text-muted: #94A3B8;
-  --text-gold: #D4A500;
+  --text-gold: #C97E24;
   --text-white: #FFFFFF;
 
   /* Borders */

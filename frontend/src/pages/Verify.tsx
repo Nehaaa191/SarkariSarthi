@@ -18,50 +18,34 @@ interface VerifyResult {
   timestamp: Date;
 }
 
-// Known claim database (MVP)
-const KNOWN_CLAIMS: Array<{ pattern: RegExp; verdict: SubClaim['verdict']; evidence: string; source: string }> = [
-  { pattern: /student.*receive.*10.?000|scholarship.*10.?000/i, verdict: 'verified', evidence: 'Central Sector Scholarship provides ₹10,000/year for UG and ₹20,000/year for PG students.', source: 'scholarships.gov.in - MoE Guidelines 2024-25' },
-  { pattern: /pm.?kisan.*6000|₹6.?000.*pm.?kisan/i, verdict: 'verified', evidence: 'PM-KISAN provides ₹6,000 per year in 3 installments of ₹2,000 each.', source: 'pmkisan.gov.in' },
-  { pattern: /pm.?kisan.*12000|₹12.?000.*kisan/i, verdict: 'false', evidence: 'PM-KISAN provides ₹6,000/year, NOT ₹12,000. This is a common misinformation.', source: 'pmkisan.gov.in' },
-  { pattern: /ayushman.*5 ?lakh|₹5.*lakh.*health/i, verdict: 'verified', evidence: 'Ayushman Bharat PM-JAY provides health cover of ₹5 lakh per family per year.', source: 'pmjay.gov.in' },
-  { pattern: /ayushman.*10 ?lakh|₹10.*lakh.*ayushman/i, verdict: 'false', evidence: 'Ayushman Bharat PM-JAY provides ₹5 lakh, not ₹10 lakh. Always check official portal.', source: 'pmjay.gov.in' },
-  { pattern: /mudra.*50 ?lakh|mudra loan.*50/i, verdict: 'false', evidence: 'PM Mudra Yojana maximum is ₹10 lakh (Tarun category). Not ₹50 lakh.', source: 'mudra.org.in' },
-  { pattern: /mudra.*10 ?lakh/i, verdict: 'verified', evidence: 'PM Mudra Yojana Tarun category provides loans up to ₹10 lakh.', source: 'mudra.org.in' },
-  { pattern: /free.*laptop.*government|government.*free.*laptop/i, verdict: 'unverifiable', evidence: 'No central government scheme currently provides free laptops to all students. Some state governments have local schemes. Verify with your state government.', source: 'N/A - State level varies' },
-];
-
 async function verifyClaim(claim: string, apiKey: string): Promise<VerifyResult> {
-  // Check local database first
-  const localMatches = KNOWN_CLAIMS.filter(kc => kc.pattern.test(claim));
+  if (!apiKey) {
+    return {
+      original: claim,
+      overall: 'unverifiable',
+      subClaims: [{
+        text: claim,
+        verdict: 'unverifiable',
+        evidence: 'Automated claim verification requires an active Gemini AI connection. Connect your API key in Chat to enable live analysis, or verify directly with official government portals.',
+        source: 'Official portals',
+      }],
+      timestamp: new Date(),
+    };
+  }
 
-  let subClaims: SubClaim[] = localMatches.map(m => ({
-    text: claim,
-    verdict: m.verdict,
-    evidence: m.evidence,
-    source: m.source,
-  }));
-
-  if (apiKey) {
-    // Use Gemini to decompose and verify
-    const prompt = `You are a fact-checker for Indian government schemes.
+  // Use Gemini to decompose and verify
+  const prompt = `You are a fact-checker for Indian government schemes.
 
 Claim to verify: "${claim}"
 
 Task: 
 1. Decompose this claim into atomic sub-claims
-2. For each sub-claim, evaluate against known scheme data:
+2. For each sub-claim, evaluate against verified government scheme data:
    - VERIFIED: matches official data
    - MISLEADING: technically not wrong but misleads
    - FALSE: directly contradicts official data
-   - UNVERIFIABLE: cannot be checked against known sources
+   - UNVERIFIABLE: cannot be confirmed from official sources
    - OUTDATED: may have been correct before but is now changed
-
-Known scheme data:
-- PM-KISAN: ₹6,000/year in 3 instalments
-- CSSS Scholarship: ₹10,000/year (UG), ₹20,000/year (PG), income ≤ ₹8 lakh, 80th percentile
-- Ayushman Bharat: ₹5 lakh health cover per family
-- PM Mudra: max ₹10 lakh (Tarun)
-- PM Awas Yojana: subsidy for EWS/LIG/MIG
 
 Respond in JSON:
 {
@@ -71,52 +55,53 @@ Respond in JSON:
   "overall": "verified|partially_correct|misleading|false|unverifiable"
 }`;
 
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
-          })
-        }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          subClaims = parsed.subClaims.map((sc: any) => ({
-            text: sc.text,
-            verdict: sc.verdict.toLowerCase().replace('_', '') as SubClaim['verdict'],
-            evidence: sc.evidence,
-            source: sc.source,
-          }));
-          return {
-            original: claim,
-            overall: parsed.overall || inferOverall(subClaims),
-            subClaims,
-            timestamp: new Date(),
-          };
-        }
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
+        })
       }
-    } catch (e) { /* fallback to local */ }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const subClaims: SubClaim[] = parsed.subClaims.map((sc: any) => ({
+          text: sc.text,
+          verdict: (sc.verdict || 'unverifiable').toLowerCase().replace('_', '') as SubClaim['verdict'],
+          evidence: sc.evidence,
+          source: sc.source,
+        }));
+        return {
+          original: claim,
+          overall: parsed.overall || inferOverall(subClaims),
+          subClaims,
+          timestamp: new Date(),
+        };
+      }
+    }
+  } catch {
+    // API failure fallback
   }
 
-  // Fallback: local analysis
-  if (subClaims.length === 0) {
-    subClaims = [{
+  return {
+    original: claim,
+    overall: 'unverifiable',
+    subClaims: [{
       text: claim,
       verdict: 'unverifiable',
-      evidence: 'This specific claim was not found in our local scheme database. Please verify on official government portals.',
-      source: 'N/A',
-    }];
-  }
-
-  return { original: claim, overall: inferOverall(subClaims), subClaims, timestamp: new Date() };
+      evidence: 'Could not complete automated verification against official sources. Always verify critical information directly on official government portals.',
+      source: 'Official portals',
+    }],
+    timestamp: new Date(),
+  };
 }
 
 function inferOverall(subs: SubClaim[]): VerifyResult['overall'] {
@@ -133,7 +118,7 @@ const verdictConfig = {
   misleading: { label: 'Misleading', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', icon: <AlertCircle size={16} /> },
   false: { label: 'False', color: '#EF4444', bg: '#FEF2F2', border: '#FECACA', icon: <X size={16} /> },
   unverifiable: { label: 'Unverifiable', color: '#6B7280', bg: '#F9FAFB', border: '#E5E7EB', icon: <Info size={16} /> },
-  outdated: { label: 'Outdated', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE', icon: <AlertCircle size={16} /> },
+  outdated: { label: 'Outdated', color: '#172554', bg: '#F1F5F9', border: '#E2E8F0', icon: <AlertCircle size={16} /> },
 };
 
 const EXAMPLE_CLAIMS = [
@@ -150,14 +135,13 @@ export default function Verify() {
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [, setHistory] = useState<VerifyResult[]>([]);
-  const apiKey = localStorage.getItem('gemini_api_key') || '';
 
   const verify = async (claim?: string) => {
     const text = (claim || input).trim();
     if (!text) return;
     setLoading(true);
     setResult(null);
-    const r = await verifyClaim(text, apiKey);
+    const r = await verifyClaim(text);
     setResult(r);
     setHistory(prev => [r, ...prev].slice(0, 5));
     setLoading(false);
@@ -187,7 +171,22 @@ export default function Verify() {
       <div className="verify-content">
         <div className="verify-left">
           <h1 className="verify-h1">Verify a claim</h1>
-          <p className="verify-sub">Paste any WhatsApp forward, SMS, or social media post about a government scheme. We'll check it against official sources.</p>
+          <p className="verify-sub">Paste any statement or social media claim about a government scheme. We'll verify it against official sources.</p>
+
+          {!apiKey && (
+            <div style={{
+              padding: '10px 14px',
+              background: 'var(--yellow-light)',
+              border: '1px solid var(--yellow)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '12.5px',
+              color: 'var(--navy)',
+              marginBottom: '14px',
+              lineHeight: 1.5,
+            }}>
+              ℹ️ Live AI claim verification requires a Gemini API key. You can connect your free API key in <Link to="/chat" style={{ fontWeight: 700, textDecoration: 'underline' }}>Chat</Link>.
+            </div>
+          )}
 
           <textarea
             className="verify-textarea"
