@@ -1,5 +1,8 @@
-const BASE_URL = 'http://localhost:3001';
+// Use relative URLs so requests are proxied through Vite dev server (same-origin).
+// In production, set VITE_API_BASE to your deployed backend URL.
+const BASE_URL = import.meta.env.VITE_API_BASE ?? '';
 let _accessToken: string | null = null;
+
 
 export function setAccessToken(token: string | null): void {
   _accessToken = token;
