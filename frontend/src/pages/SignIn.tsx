@@ -77,6 +77,18 @@ export default function SignIn() {
   }, [screen]);
 
   const handleGoogleSignIn = () => {
+    // Build Supabase OAuth URL. VITE_SUPABASE_URL must be defined in a .env file at the project root.
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/*$/, "");
+    if (!supabaseUrl) {
+      setError('Supabase URL is not configured. Please check the .env file.');
+      return;
+    }
+    const redirect = `${window.location.origin}/auth/callback`;
+    const googleAuthUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
+      redirect
+    )}&prompt=select_account`;
+    window.location.href = googleAuthUrl;
+  };
     // Use a relative URL so the request goes through the Vite proxy → backend.
     // This avoids hardcoding the backend port and works in any environment.
     window.location.href = '/auth/google';
