@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, BookOpen, ExternalLink, ChevronRight, Filter, ArrowLeft, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { Search, ExternalLink, ChevronRight, Filter, ArrowLeft, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import './Schemes.css';
 

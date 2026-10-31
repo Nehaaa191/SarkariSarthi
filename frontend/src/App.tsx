@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { I18nProvider } from './i18n/context';
+import { FeaturesDrawerProvider } from './context/FeaturesDrawerContext';
+import FeaturesDrawer from './components/FeaturesDrawer';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './pages/Home';
@@ -19,6 +21,7 @@ function AppLayout() {
 
   return (
     <>
+      <FeaturesDrawer />
       {!isAppPage && <Navbar />}
       <Routes>
         <Route path="/" element={<Home />} />
@@ -71,9 +74,11 @@ function NotFound() {
 function App() {
   return (
     <I18nProvider>
-      <BrowserRouter>
-        <AppLayout />
-      </BrowserRouter>
+      <FeaturesDrawerProvider>
+        <BrowserRouter>
+          <AppLayout />
+        </BrowserRouter>
+      </FeaturesDrawerProvider>
     </I18nProvider>
   );
 }

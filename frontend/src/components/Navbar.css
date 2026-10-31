@@ -30,6 +30,34 @@
   gap: 0;
 }
 
+/* 3 Lines Hamburger Menu Button (Top Left Corner) */
+.nav-hamburger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--navy);
+  cursor: pointer;
+  margin-right: 14px;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+
+.nav-hamburger-btn:hover {
+  background: rgba(27, 32, 96, 0.06);
+  border-color: rgba(27, 32, 96, 0.12);
+  color: var(--gold-dark);
+  transform: scale(1.05);
+}
+
+.nav-hamburger-btn:active {
+  transform: scale(0.96);
+}
+
 /* Brand */
 .nav-brand {
   display: flex;

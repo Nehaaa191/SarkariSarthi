@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useLocation, Link } from 'react-router-dom';
 import {
   Send, Mic, MicOff, Volume2, VolumeX, FileText, CheckCircle2,
-  AlertCircle, X, ChevronRight, Sparkles, LayoutDashboard,
+  AlertCircle, X, Sparkles, LayoutDashboard,
   BookOpen, UserCheck, Shield, FileCheck, Menu, ArrowLeft,
   Loader2, ExternalLink, ThumbsUp, ThumbsDown
 } from 'lucide-react';
@@ -114,7 +114,7 @@ RULES:
 `;
 
 // ─── Call AI API ──────────────────────────────────────────────────
-async function callGeminiAPI(messages: Array<{role: string; content: string}>, apiKey: string): Promise<string> {
+async function callGeminiAPI(messages: Array<{ role: string; content: string }>, apiKey: string): Promise<string> {
   const systemMsg = { role: 'user', parts: [{ text: SCHEMES_CONTEXT }] };
   const historyParts = messages.slice(0, -1).map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
@@ -150,8 +150,9 @@ async function callGeminiAPI(messages: Array<{role: string; content: string}>, a
 }
 
 // Eligibility rule engine for quick schemes
-function checkEligibility(profile: Record<string, string>): EligResult | null {
-  const { scheme, income, marks, age, land, category } = profile;
+export function checkEligibility(profile: Record<string, string>): EligResult | null {
+  const { scheme, income, marks, age, land } = profile;
+  void land;
   if (!scheme) return null;
 
   if (scheme.toLowerCase().includes('scholarship') || scheme.toLowerCase().includes('csss')) {
@@ -306,7 +307,6 @@ function EligibilityCard({ result }: { result: EligResult }) {
 // ─── Main Chat Page ───────────────────────────────────────────────
 export default function Chat() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { lang } = useI18n();
   const initialQuery = location.state?.initialQuery || '';
 
@@ -398,10 +398,10 @@ export default function Chat() {
       setMessages(prev => prev.map(m =>
         m.id === loadingMsg.id
           ? {
-              ...m,
-              content: `I encountered an error: ${err.message}. Please check your API key and try again.`,
-              loading: false,
-            }
+            ...m,
+            content: `I encountered an error: ${err.message}. Please check your API key and try again.`,
+            loading: false,
+          }
           : m
       ));
     } finally {

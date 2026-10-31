@@ -1,4 +1,3 @@
-import React from 'react';
 import { CheckCircle2, Upload, FileText } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import './DashboardPreview.css';

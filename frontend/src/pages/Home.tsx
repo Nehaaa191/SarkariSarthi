@@ -1,7 +1,5 @@
-import React from 'react';
 import Hero from '../components/Hero';
 import AskSaathi from '../components/AskSaathi';
-import Features from '../components/Features';
 import HowItWorks from '../components/HowItWorks';
 import DashboardPreview from '../components/DashboardPreview';
 import TrustSection from '../components/TrustSection';
@@ -12,7 +10,6 @@ export default function Home() {
     <main>
       <Hero />
       <AskSaathi />
-      <Features />
       <HowItWorks />
       <DashboardPreview />
       <TrustSection />

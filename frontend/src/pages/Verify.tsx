@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Shield, CheckCircle2, AlertCircle, X, Loader2, ArrowLeft, ExternalLink, Info } from 'lucide-react';
+import { useState } from 'react';
+import { Shield, CheckCircle2, AlertCircle, X, Loader2, ArrowLeft, ExternalLink, Info, Menu } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useFeaturesDrawer } from '../context/FeaturesDrawerContext';
 import './Verify.css';
 
 interface SubClaim {
@@ -144,10 +145,11 @@ const EXAMPLE_CLAIMS = [
 ];
 
 export default function Verify() {
+  const { openDrawer } = useFeaturesDrawer();
   const [input, setInput] = useState('');
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<VerifyResult[]>([]);
+  const [, setHistory] = useState<VerifyResult[]>([]);
   const apiKey = localStorage.getItem('gemini_api_key') || '';
 
   const verify = async (claim?: string) => {
@@ -166,7 +168,18 @@ export default function Verify() {
   return (
     <div className="verify-page">
       <div className="verify-topbar">
-        <Link to="/chat" className="verify-back"><ArrowLeft size={16} /> Dashboard</Link>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button
+            className="topbar-drawer-btn"
+            onClick={openDrawer}
+            aria-label="Open 5 AI Features Sidebar"
+            title="Open Features"
+            id="verify-drawer-btn"
+          >
+            <Menu size={18} />
+          </button>
+          <Link to="/chat" className="verify-back"><ArrowLeft size={16} /> Dashboard</Link>
+        </div>
         <div className="verify-topbar-title"><Shield size={18} /> AI Claim Verifier</div>
         <Link to="/" className="verify-home">← Home</Link>
       </div>

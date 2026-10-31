@@ -1,4 +1,4 @@
-import React, { useState, useRef, KeyboardEvent } from 'react';
+import { useState, useRef, type KeyboardEvent } from 'react';
 import { Search, Mic, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/context';

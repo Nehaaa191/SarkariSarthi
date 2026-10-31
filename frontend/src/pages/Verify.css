@@ -14,6 +14,27 @@
   border-bottom: 1px solid var(--border);
 }
 
+.topbar-drawer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--navy);
+  cursor: pointer;
+  margin-right: 12px;
+  transition: all var(--transition);
+}
+
+.topbar-drawer-btn:hover {
+  background: var(--border);
+  color: var(--gold-dark);
+  transform: scale(1.05);
+}
+
 .verify-back, .verify-home {
   display: flex;
   align-items: center;

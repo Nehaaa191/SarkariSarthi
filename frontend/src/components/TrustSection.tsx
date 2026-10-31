@@ -1,4 +1,3 @@
-import React from 'react';
 import { Monitor, Globe, Sparkles, Lock, CheckCircle2 } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import './TrustSection.css';

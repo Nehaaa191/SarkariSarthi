@@ -1,0 +1,317 @@
+/* ==========================================================================
+   FeaturesDrawer.css - Sliding sidebar with 5 civic AI services
+   ========================================================================== */
+
+.features-drawer-container {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  pointer-events: none;
+  visibility: hidden;
+  transition: visibility 0.3s ease;
+}
+
+.features-drawer-container.open {
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* Backdrop */
+.features-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.features-drawer-container.open .features-drawer-backdrop {
+  opacity: 1;
+}
+
+/* Sliding Panel */
+.features-drawer-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 440px;
+  max-width: 90vw;
+  background: #ffffff;
+  box-shadow: 20px 0 50px rgba(0, 0, 0, 0.18), 4px 0 16px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-right: 1px solid var(--border);
+}
+
+.features-drawer-container.open .features-drawer-panel {
+  transform: translateX(0);
+}
+
+/* Header */
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+
+.drawer-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.drawer-logo {
+  width: 36px;
+  height: 36px;
+  background: var(--gold);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.drawer-brand-text {
+  font-family: var(--font-heading);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.drawer-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.drawer-close-btn:hover {
+  background: var(--border);
+  color: var(--navy);
+  transform: scale(1.05);
+}
+
+/* Section Info */
+.drawer-section-info {
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  background: linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%);
+}
+
+.drawer-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.drawer-section-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--navy);
+  background: rgba(27, 32, 96, 0.08);
+  border-radius: var(--radius-full);
+}
+
+.drawer-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.drawer-tagline {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Options List */
+.drawer-options-list {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+/* Card Option */
+.drawer-card-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1.5px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+  width: 100%;
+}
+
+.drawer-card-option:hover {
+  border-color: var(--accent-color, var(--navy));
+  background: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.drawer-card-option.active {
+  border-color: var(--accent-color, var(--navy));
+  background: #FAF5FF;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.dco-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.drawer-card-option:hover .dco-icon-box {
+  transform: scale(1.08);
+}
+
+.dco-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.dco-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dco-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dco-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dco-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dco-arrow {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  margin-top: 14px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.drawer-card-option:hover .dco-arrow {
+  color: var(--accent-color, var(--navy));
+  transform: translateX(4px);
+}
+
+/* Footer */
+.drawer-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.drawer-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all var(--transition);
+}
+
+.drawer-footer-link:hover {
+  background: rgba(27, 32, 96, 0.08);
+}
+
+.drawer-footer-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .features-drawer-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+  .drawer-options-list {
+    padding: 12px;
+  }
+  .drawer-card-option {
+    padding: 12px;
+  }
+}
+

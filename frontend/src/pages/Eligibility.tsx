@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { CheckCircle2, AlertCircle, X, ChevronRight, Loader2, ArrowLeft, UserCheck } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, AlertCircle, X, ChevronRight, Loader2, ArrowLeft, UserCheck, Menu } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useFeaturesDrawer } from '../context/FeaturesDrawerContext';
 import './Eligibility.css';
 
 interface ProfileData {
@@ -149,6 +150,7 @@ const statusConfig = {
 };
 
 export default function Eligibility() {
+  const { openDrawer } = useFeaturesDrawer();
   const [step, setStep] = useState<'form' | 'results'>('form');
   const [profile, setProfile] = useState<ProfileData>({
     name: '', age: '', gender: '', category: '', state: '',
@@ -178,7 +180,18 @@ export default function Eligibility() {
     <div className="elig-page">
       {/* Header */}
       <div className="elig-topbar">
-        <Link to="/chat" className="elig-back"><ArrowLeft size={16} /> Dashboard</Link>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button
+            className="topbar-drawer-btn"
+            onClick={openDrawer}
+            aria-label="Open 5 AI Features Sidebar"
+            title="Open Features"
+            id="elig-drawer-btn"
+          >
+            <Menu size={18} />
+          </button>
+          <Link to="/chat" className="elig-back"><ArrowLeft size={16} /> Dashboard</Link>
+        </div>
         <div className="elig-topbar-title">
           <UserCheck size={18} />
           <span>Smart Eligibility Checker</span>

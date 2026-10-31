@@ -1,8 +1,7 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Sparkles, BookOpen, UserCheck, Shield, FileCheck,
-  LayoutDashboard, Star, ArrowRight, Clock, TrendingUp
+  Sparkles, BookOpen, UserCheck, Shield,
+  Star, ArrowRight, Clock, TrendingUp
 } from 'lucide-react';
 import './Dashboard.css';
 

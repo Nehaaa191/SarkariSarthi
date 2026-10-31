@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2, Circle, ExternalLink, FileText, ArrowLeft, Sparkles } from 'lucide-react';
+import { CheckCircle2, Circle, ExternalLink, FileText, ArrowLeft, Sparkles, Menu } from 'lucide-react';
+import { useFeaturesDrawer } from '../context/FeaturesDrawerContext';
 import './Apply.css';
 
 interface Step {
@@ -53,6 +54,7 @@ const GUIDES: Record<string, { name: string; portal: string; portalUrl: string; 
 };
 
 export default function Apply() {
+  const { openDrawer } = useFeaturesDrawer();
   const { id = 'guide' } = useParams<{ id: string }>();
   const guide = GUIDES[id] || GUIDES['guide'];
   const [completed, setCompleted] = useState<string[]>([]);
@@ -66,7 +68,18 @@ export default function Apply() {
   return (
     <div className="apply-page">
       <div className="apply-topbar">
-        <Link to="/schemes" className="apply-back"><ArrowLeft size={15} /> Schemes</Link>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button
+            className="topbar-drawer-btn"
+            onClick={openDrawer}
+            aria-label="Open 5 AI Features Sidebar"
+            title="Open Features"
+            id="apply-drawer-btn"
+          >
+            <Menu size={18} />
+          </button>
+          <Link to="/schemes" className="apply-back"><ArrowLeft size={15} /> Schemes</Link>
+        </div>
         <div className="apply-topbar-title"><FileText size={17} /> Application Guide</div>
         <Link to="/chat" state={{ initialQuery: `How do I apply for ${guide.name}?` }} className="apply-ask-btn">
           <Sparkles size={14} /> Ask Saathi
