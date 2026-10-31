@@ -30,8 +30,8 @@ const KNOWN_CLAIMS: Array<{ pattern: RegExp; verdict: SubClaim['verdict']; evide
   { pattern: /free.*laptop.*government|government.*free.*laptop/i, verdict: 'unverifiable', evidence: 'No central government scheme currently provides free laptops to all students. Some state governments have local schemes. Verify with your state government.', source: 'N/A - State level varies' },
 ];
 
-async function verifyClaim(claim: string, apiKey: string): Promise<VerifyResult> {
-  // Check local database first
+async function verifyClaim(claim: string): Promise<VerifyResult> {
+  // Check local database first for instant known matches
   const localMatches = KNOWN_CLAIMS.filter(kc => kc.pattern.test(claim));
 
   let subClaims: SubClaim[] = localMatches.map(m => ({
@@ -41,69 +41,48 @@ async function verifyClaim(claim: string, apiKey: string): Promise<VerifyResult>
     source: m.source,
   }));
 
-  if (apiKey) {
-    // Use Gemini to decompose and verify
-    const prompt = `You are a fact-checker for Indian government schemes.
+  // If local direct match is verified or false, we can use it immediately
+  if (subClaims.length > 0 && subClaims[0].verdict !== 'unverifiable') {
+    return {
+      original: claim,
+      overall: inferOverall(subClaims),
+      subClaims,
+      timestamp: new Date(),
+    };
+  }
 
-Claim to verify: "${claim}"
+  // Otherwise, call Flask Backend (Groq) for deeper atomic claim analysis
+  const endpoints = ['/api/verify', 'http://127.0.0.1:5000/api/verify', 'http://localhost:5000/api/verify'];
 
-Task: 
-1. Decompose this claim into atomic sub-claims
-2. For each sub-claim, evaluate against known scheme data:
-   - VERIFIED: matches official data
-   - MISLEADING: technically not wrong but misleads
-   - FALSE: directly contradicts official data
-   - UNVERIFIABLE: cannot be checked against known sources
-   - OUTDATED: may have been correct before but is now changed
-
-Known scheme data:
-- PM-KISAN: ₹6,000/year in 3 instalments
-- CSSS Scholarship: ₹10,000/year (UG), ₹20,000/year (PG), income ≤ ₹8 lakh, 80th percentile
-- Ayushman Bharat: ₹5 lakh health cover per family
-- PM Mudra: max ₹10 lakh (Tarun)
-- PM Awas Yojana: subsidy for EWS/LIG/MIG
-
-Respond in JSON:
-{
-  "subClaims": [
-    {"text": "sub-claim text", "verdict": "VERIFIED|MISLEADING|FALSE|UNVERIFIABLE|OUTDATED", "evidence": "explanation", "source": "official portal"}
-  ],
-  "overall": "verified|partially_correct|misleading|false|unverifiable"
-}`;
-
+  for (const endpoint of endpoints) {
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
-          })
-        }
-      );
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claim }),
+      });
+
       if (res.ok) {
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          subClaims = parsed.subClaims.map((sc: any) => ({
-            text: sc.text,
-            verdict: sc.verdict.toLowerCase().replace('_', '') as SubClaim['verdict'],
-            evidence: sc.evidence,
-            source: sc.source,
+        const parsed = await res.json();
+        if (parsed?.subClaims && Array.isArray(parsed.subClaims)) {
+          const formattedSubClaims = parsed.subClaims.map((sc: any) => ({
+            text: sc.text || claim,
+            verdict: String(sc.verdict || 'unverifiable').toLowerCase().replace('_', '') as SubClaim['verdict'],
+            evidence: sc.evidence || '',
+            source: sc.source || 'Official Portals',
           }));
+
           return {
             original: claim,
-            overall: parsed.overall || inferOverall(subClaims),
-            subClaims,
+            overall: parsed.overall || inferOverall(formattedSubClaims),
+            subClaims: formattedSubClaims,
             timestamp: new Date(),
           };
         }
       }
-    } catch (e) { /* fallback to local */ }
+    } catch {
+      // Try next endpoint or fall through to fallback
+    }
   }
 
   // Fallback: local analysis
@@ -150,14 +129,13 @@ export default function Verify() {
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [, setHistory] = useState<VerifyResult[]>([]);
-  const apiKey = localStorage.getItem('gemini_api_key') || '';
 
   const verify = async (claim?: string) => {
     const text = (claim || input).trim();
     if (!text) return;
     setLoading(true);
     setResult(null);
-    const r = await verifyClaim(text, apiKey);
+    const r = await verifyClaim(text);
     setResult(r);
     setHistory(prev => [r, ...prev].slice(0, 5));
     setLoading(false);
