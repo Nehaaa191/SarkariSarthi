@@ -91,7 +91,7 @@ export default function SignIn() {
   };
   // Use a relative URL so the request goes through the Vite proxy → backend.
   // This avoids hardcoding the backend port and works in any environment.
-  window.location.href = '/auth/google';
+
 };
 
 const handleIdentifySubmit = async (e: FormEvent) => {
