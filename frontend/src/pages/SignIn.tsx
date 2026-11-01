@@ -17,28 +17,10 @@ import './SignIn.css';
 type AuthScreen = 'identify' | 'otp';
 type ActiveTab = 'email' | 'phone';
 
-function maskEmail(email: string): string {
-  const atIndex = email.indexOf('@');
-  if (atIndex > 1) {
-    return `${email[0]}***${email.slice(atIndex)}`;
-  }
-  return email;
-}
-
-function maskIdentifier(identifier: string, tab: ActiveTab): string {
-  if (tab === 'email') {
-    return maskEmail(identifier);
-  }
-  // phone: show last 4 digits
-  if (identifier.length > 4) {
-    return `+91 ******${identifier.slice(-4)}`;
-  }
-  return identifier;
-}
 
 export default function SignIn() {
   const { login } = useAuth();
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
 

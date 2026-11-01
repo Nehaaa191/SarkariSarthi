@@ -241,168 +241,95 @@ def chat():
 
 
 @app.route("/api/verify", methods=["POST"])
+@app.route("/api/verify", methods=["POST"])
 def verify_claim():
-    """Verify policy claim endpoint using Groq and optional RAG document grounding."""
+    """Verify policy claim endpoint using Groq with structured JSON response."""
     data = request.get_json(silent=True)
     if not data or "claim" not in data:
         return jsonify({"error": "Missing 'claim' in request body."}), 400
 
     claim = str(data["claim"]).strip()
+    scheme_context = str(data.get("scheme_context", "")).strip().lower()
     if not claim:
         return jsonify({"error": "Claim text cannot be empty."}), 400
 
     model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "llama3-8b-8192"
 
-    # Stage 2: RAG-Grounded Claim Verification if document_id is provided in request
-    if "document_id" in data:
-        raw_doc_id = data.get("document_id")
-        doc_id = str(raw_doc_id).strip() if raw_doc_id is not None else ""
+    # Optional scheme‑specific knowledge (ASCII hyphen)
+    SCHEME_KNOWLEDGE = {
+        "pm-kisan": "PM-KISAN: ₹16,000/year (₹12,000 each installment). Eligibility: small & marginal farmers owning ≤2 ha land.",
+        "csss": "CSSS Scholarship: UG ₹110,000/yr, PG ₹120,000/yr, family income ≤₹18 lakh, 80th percentile in class 12.",
+        "ayushman": "Ayushman Bharat (PM-JAY): ₹15 lakh cashless health cover per family per year.",
+        "pmay": "PM Awas Yojana: subsidy up to ₹2.67 lakh for EWS/LIG families.",
+        "mudra": "PM MUDRA: loans up to ₹110 lakh (Tarun category).",
+        "pmmvy": "PM Matru Vandana Yojana: ₹15,000 for first live child.",
+        "bbbp": "Beti Bachao Beti Padhao / Sukanya Samriddhi: savings scheme for girl child.",
+        "nsp": "National Scholarship Portal: centralised scholarship portal for SC/ST/OBC/minority students."
+    }
+    scheme_block = f"
+Selected scheme context: {SCHEME_KNOWLEDGE.get(scheme_context, '')}
+" if scheme_context and scheme_context in SCHEME_KNOWLEDGE else ""
 
-        # Missing or empty document_id: never generate VERIFIED or FALSE
-        if not doc_id:
-            return jsonify({
-                "error": "Missing or empty 'document_id'. Please select a valid document for verification.",
-                "subClaims": [{
-                    "text": claim,
-                    "verdict": "UNVERIFIABLE",
-                    "evidence": "No document ID was provided for verification.",
-                    "source": "N/A"
-                }],
-                "overall": "unverifiable",
-                "sufficient_evidence": False,
-                "citations": []
-            }), 400
+    prompt = f"""You are a fact‑checker for Indian government schemes.
 
-        # Invalid document_id: never generate VERIFIED or FALSE
-        if not document_exists(doc_id):
-            return jsonify({
-                "error": f"Document '{doc_id}' not found.",
-                "subClaims": [{
-                    "text": claim,
-                    "verdict": "UNVERIFIABLE",
-                    "evidence": f"Document '{doc_id}' does not exist on the server.",
-                    "source": "N/A"
-                }],
-                "overall": "unverifiable",
-                "sufficient_evidence": False,
-                "citations": []
-            }), 404
+Claim: "{claim}"{scheme_block}
 
-        # Document exists -> verify strictly against this document
-        try:
-            client = get_groq_client()
-        except Exception as e:
-            logger.error(f"Groq client unavailable: {e}")
-            meta = get_doc_metadata(doc_id) or {}
-            filename = meta.get("filename", "document.pdf")
-            return jsonify({
-                "subClaims": [{
-                    "text": claim,
-                    "verdict": "UNVERIFIABLE",
-                    "evidence": "Verification service unavailable at this moment. Please check official government portals.",
-                    "source": filename
-                }],
-                "overall": "unverifiable",
-                "sufficient_evidence": False,
-                "citations": [],
-                "document_id": doc_id,
-                "filename": filename
-            }), 200
+Produce a **valid JSON** object with these fields (no extra text):
+- overall: one of verified, partially_correct, misleading, false, unverifiable
+- verdict: one of VERIFIED, FALSE, PARTIALLY_TRUE, MISLEADING, UNVERIFIABLE, OUTDATED
+- confidence: integer 0-100
+- explanation: short plain‑language summary
+- supporting_evidence (optional)
+- contradicting_evidence (optional)
+- caveats (optional)
+- subClaims: array of {{text, verdict, evidence, source}}
 
-        try:
-            result = verify_claim_against_document(
-                doc_id=doc_id,
-                claim=claim,
-                groq_client=client,
-                model_name=model_name
-            )
-            return jsonify(result), 200
-        except Exception as e:
-            logger.exception(f"Error in verify_claim_against_document for doc {doc_id}")
-            meta = get_doc_metadata(doc_id) or {}
-            filename = meta.get("filename", "document.pdf")
-            return jsonify({
-                "subClaims": [{
-                    "text": claim,
-                    "verdict": "UNVERIFIABLE",
-                    "evidence": "An error occurred while verifying the claim against the document.",
-                    "source": filename
-                }],
-                "overall": "unverifiable",
-                "sufficient_evidence": False,
-                "citations": [],
-                "document_id": doc_id,
-                "filename": filename
-            }), 200
-
-    # Backwards compatibility: General scheme verification when document_id is not specified in request
-    prompt = f"""You are a fact-checker for Indian government schemes.
-
-Claim to verify: "{claim}"
-
-Task:
-1. Decompose this claim into atomic sub-claims
-2. For each sub-claim, evaluate against official scheme data:
-   - VERIFIED: matches official data
-   - MISLEADING: technically not wrong but misleads
-   - FALSE: directly contradicts official data
-   - UNVERIFIABLE: cannot be checked against known sources
-   - OUTDATED: may have been correct before but is now changed
-
-Known scheme data:
-- PM-KISAN: ₹6,000/year in 3 installments (₹2,000 each)
-- CSSS Scholarship: ₹10,000/year (UG), ₹20,000/year (PG), income ≤ ₹8 lakh, 80th percentile in class 12
-- Ayushman Bharat: ₹5 lakh health cover per family per year
-- PM Mudra: max ₹10 lakh (Tarun category)
-- PM Awas Yojana: subsidy for EWS/LIG/MIG
-
-Respond strictly in valid JSON format with this exact structure:
-{{
-  "subClaims": [
-    {{"text": "sub-claim text", "verdict": "VERIFIED|MISLEADING|FALSE|UNVERIFIABLE|OUTDATED", "evidence": "explanation with official data", "source": "official portal"}}
-  ],
-  "overall": "verified|partially_correct|misleading|false|unverifiable"
-}}"""
-
+Only return the JSON object.
+"""
     try:
         client = get_groq_client()
         completion = client.chat.completions.create(
             model=model_name,
             messages=[
-                {"role": "system", "content": "You are a precise JSON-only fact checker for Indian government schemes."},
+                {"role": "system", "content": "You are a precise JSON‑only fact checker for Indian government schemes."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
-            max_tokens=600,
+            max_tokens=900,
         )
-
-        raw_text = completion.choices[0].message.content or "{}"
-        # Extract JSON object from output
-        json_start = raw_text.find("{")
-        json_end = raw_text.rfind("}")
-        if json_start != -1 and json_end != -1:
-            parsed = json.loads(raw_text[json_start:json_end+1])
-            return jsonify(parsed), 200
-        else:
-            return jsonify({
-                "subClaims": [{"text": claim, "verdict": "UNVERIFIABLE", "evidence": raw_text, "source": "Official Portals"}],
-                "overall": "unverifiable"
-            }), 200
-
+        raw = completion.choices[0].message.content or "{}"
+        start_js = raw.find('{')
+        end_js = raw.rfind('}')
+        if start_js == -1 or end_js == -1:
+            raise ValueError('No JSON in response')
+        parsed = json.loads(raw[start_js:end_js+1])
+        parsed.setdefault('overall', 'unverifiable')
+        parsed.setdefault('verdict', 'UNVERIFIABLE')
+        parsed.setdefault('confidence', 0)
+        parsed.setdefault('explanation', '')
+        parsed.setdefault('supporting_evidence', '')
+        parsed.setdefault('contradicting_evidence', '')
+        parsed.setdefault('caveats', '')
+        parsed.setdefault('subClaims', [])
+        return jsonify(parsed), 200
     except Exception as e:
-        logger.exception("Error in /api/verify")
+        logging.exception('Error in /api/verify')
         return jsonify({
             "subClaims": [{
                 "text": claim,
                 "verdict": "UNVERIFIABLE",
-                "evidence": "Verification service unavailable at this moment. Please check official government portals.",
+                "evidence": "Verification service unavailable or returned malformed output.",
                 "source": "N/A"
             }],
-            "overall": "unverifiable"
+            "overall": "unverifiable",
+            "verdict": "UNVERIFIABLE",
+            "confidence": 0,
+            "explanation": "Unable to verify the claim at this time.",
+            "supporting_evidence": "",
+            "contradicting_evidence": "",
+            "caveats": "Please check official government portals for accurate information."
         }), 200
 
-
-# ─── Document RAG Endpoints ──────────────────────────────────────────
 
 @app.route("/api/documents/upload", methods=["POST"])
 def upload_document():
