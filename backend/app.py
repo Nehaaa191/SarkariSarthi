@@ -16,11 +16,25 @@ load_dotenv(os.path.join(basedir, ".env"))
 load_dotenv()
 
 app = Flask(__name__)
+
+# Initialize database
+from .db import db
+db.init_app(app)
+
+# Load models so SQLAlchemy knows about them
+with app.app_context():
+    from . import models
+    db.create_all()
+
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ----- Auth routes -----
-from auth_routes import api as auth_bp
+from .auth_routes import api as auth_bp
+from .db import db
+
+# Initialize extensions
+db.init_app(app)
 app.register_blueprint(auth_bp, url_prefix="/api")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
