@@ -73,7 +73,7 @@ Respond in JSON:
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        const subClaims: SubClaim[] = parsed.subClaims.map((sc: any) => ({
+        const subClaims: SubClaim[] = parsed.subClaims.map((sc: { text: string; verdict?: string; evidence?: string; source?: string }) => ({
           text: sc.text,
           verdict: (sc.verdict || 'unverifiable').toLowerCase().replace('_', '') as SubClaim['verdict'],
           evidence: sc.evidence,
@@ -122,11 +122,11 @@ const verdictConfig = {
 };
 
 const EXAMPLE_CLAIMS = [
-  'A student will receive ₹10,000 as scholarship from the government',
-  'PM-KISAN gives ₹12,000 per year to farmers',
-  'Ayushman Bharat provides ₹5 lakh health cover per family',
+  'A student will receive \u20B910,000 as scholarship from the government',
+  'PM-KISAN gives \u20B912,000 per year to farmers',
+  'Ayushman Bharat provides \u20B95 lakh health cover per family',
   'The government is giving free laptops to all students',
-  'PM Mudra loan goes up to ₹50 lakh',
+  'PM Mudra loan goes up to \u20B950 lakh',
 ];
 
 export default function Verify() {
@@ -137,12 +137,14 @@ export default function Verify() {
   const [, setHistory] = useState<VerifyResult[]>([]);
   const apiKey = '';
 
+  const apiKey: string = import.meta.env.VITE_GEMINI_API_KEY ?? '';
+
   const verify = async (claim?: string) => {
     const text = (claim || input).trim();
     if (!text) return;
     setLoading(true);
     setResult(null);
-    const r = await verifyClaim(text);
+    const r = await verifyClaim(text, apiKey);
     setResult(r);
     setHistory(prev => [r, ...prev].slice(0, 5));
     setLoading(false);

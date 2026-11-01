@@ -46,35 +46,29 @@ interface EligResult {
 }
 
 // ─── Call AI API via Flask Backend (Groq) ───────────────────────────
+// VITE_API_BASE must be set to the deployed backend URL (e.g. https://sarkarisaathi-backend.onrender.com)
+const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) ?? '').replace(/\/+$/, '');
+
 async function callChatAPI(messages: Array<{ role: string; content: string }>): Promise<string> {
-  const endpoints = ['/api/chat', 'http://127.0.0.1:5000/api/chat', 'http://localhost:5000/api/chat'];
-  let lastError: Error | null = null;
+  const endpoint = `${API_BASE}/chat`;
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages })
-      });
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || err?.message || `Server error (${res.status})`);
-      }
-
-      const data = await res.json();
-      return data?.response || 'No response received.';
-    } catch (err: any) {
-      lastError = err;
-      if (err.name === 'TypeError' || err.message?.includes('Failed to fetch')) {
-        continue;
-      }
-      throw err;
-    }
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({} as Record<string, string>));
+    throw new Error(
+      (errData as { error?: string; message?: string }).error ||
+      (errData as { error?: string; message?: string }).message ||
+      `Server error (${res.status})`
+    );
   }
 
-  throw lastError || new Error('Could not connect to SarkariSaathi backend server. Please ensure the backend is running.');
+  const data = await res.json() as { response?: string };
+  return data?.response || 'No response received.';
 }
 
 // Eligibility rule engine for quick schemes

@@ -1,4 +1,8 @@
-const BASE_URL = 'http://localhost:3001';
+// Use relative URLs so requests are proxied through Vite dev server (same-origin).
+// In production, VITE_API_BASE must be set to the deployed backend URL + /api
+// e.g. https://sarkarisarthibackend.onrender.com/api
+const BASE_URL = ((import.meta.env.VITE_API_BASE as string | undefined) ?? '').replace(/\/+$/, '');
+
 let _accessToken: string | null = null;
 
 export function setAccessToken(token: string | null): void {
@@ -9,7 +13,7 @@ export function getAccessToken(): string | null {
   return _accessToken;
 }
 
-export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function apiFetch<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = endpoint.startsWith('http')
     ? endpoint
     : `${BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
@@ -31,11 +35,12 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
   const res = await fetch(url, {
     ...options,
     headers,
-    credentials: 'include',
+    // NOTE: Do NOT use credentials:'include' — auth is via Bearer token, not cookies.
+    // Using credentials:'include' with CORS origins:'*' causes browsers to block the request.
     body,
   });
 
-  let data: any = null;
+  let data: unknown = null;
   const contentType = res.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
     try {
@@ -52,8 +57,9 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
   }
 
   if (!res.ok) {
+    const d = data as Record<string, unknown> | null;
     const errorMsg =
-      (data && typeof data === 'object' && data.message) ||
+      (d && typeof d === 'object' && typeof d['message'] === 'string' && d['message']) ||
       (typeof data === 'string' && data) ||
       `Request failed with status ${res.status}`;
     throw new Error(errorMsg);

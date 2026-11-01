@@ -8,27 +8,32 @@ import {
   type ClipboardEvent,
 } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mail, AlertCircle, Phone } from 'lucide-react';
 import { useAuth, type User } from '../context/AuthContext';
 import { useI18n } from '../i18n/context';
 import { api } from '../lib/api';
 import './SignIn.css';
 
 type AuthScreen = 'identify' | 'otp';
-type AuthTab = 'email' | 'phone';
+type ActiveTab = 'email' | 'phone';
 
-function maskIdentifier(id: string, type: AuthTab): string {
-  if (type === 'email') {
-    const atIndex = id.indexOf('@');
-    if (atIndex > 1) {
-      return `${id[0]}***${id.slice(atIndex)}`;
-    }
-    return id;
-  } else {
-    const digits = id.replace(/\D/g, '');
-    const last4 = digits.slice(-4);
-    return `+91 XXXXXX${last4}`;
+function maskEmail(email: string): string {
+  const atIndex = email.indexOf('@');
+  if (atIndex > 1) {
+    return `${email[0]}***${email.slice(atIndex)}`;
   }
+  return email;
+}
+
+function maskIdentifier(identifier: string, tab: ActiveTab): string {
+  if (tab === 'email') {
+    return maskEmail(identifier);
+  }
+  // phone: show last 4 digits
+  if (identifier.length > 4) {
+    return `+91 ******${identifier.slice(-4)}`;
+  }
+  return identifier;
 }
 
 export default function SignIn() {
@@ -38,7 +43,7 @@ export default function SignIn() {
   const location = useLocation();
 
   const [screen, setScreen] = useState<AuthScreen>('identify');
-  const [activeTab, setActiveTab] = useState<AuthTab>('email');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('email');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [currentIdentifier, setCurrentIdentifier] = useState('');
@@ -53,11 +58,11 @@ export default function SignIn() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('error') === 'google_failed') {
-      setError('Google sign-in was unsuccessful. Please try again or use email/phone.');
+      setError('Google sign-in was unsuccessful. Please try again or use email OTP.');
     }
   }, [location.search]);
 
-  // Handle countdown timer for OTP screen
+  // Countdown timer on OTP screen
   useEffect(() => {
     if (screen !== 'otp' || countdown <= 0) return;
     const interval = setInterval(() => {
@@ -66,7 +71,7 @@ export default function SignIn() {
     return () => clearInterval(interval);
   }, [screen, countdown]);
 
-  // Focus the first OTP input when switching to OTP screen
+  // Focus first OTP input when entering OTP screen
   useEffect(() => {
     if (screen === 'otp') {
       const timer = setTimeout(() => {
@@ -77,7 +82,17 @@ export default function SignIn() {
   }, [screen]);
 
   const handleGoogleSignIn = () => {
-    window.location.href = 'http://localhost:3001/auth/google';
+    // Build Supabase OAuth URL. VITE_SUPABASE_URL must be defined in a .env file at the project root.
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/*$/, "");
+    if (!supabaseUrl) {
+      setError('Supabase URL is not configured. Please check the .env file.');
+      return;
+    }
+    const redirect = `${window.location.origin}/auth/callback`;
+    const googleAuthUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
+      redirect
+    )}&prompt=select_account`;
+    window.location.href = googleAuthUrl;
   };
 
   const handleIdentifySubmit = async (e: FormEvent) => {
@@ -112,8 +127,9 @@ export default function SignIn() {
       setOtp(['', '', '', '', '', '']);
       setCountdown(60);
       setScreen('otp');
-    } catch (err: any) {
-      setError(err?.message || 'Failed to send OTP. Please try again.');
+    } catch (err: unknown) {
+      const anyErr = err as { message?: string };
+      setError(anyErr?.message || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -186,13 +202,14 @@ export default function SignIn() {
 
       if (res && res.accessToken && res.user) {
         login(res.accessToken, res.user);
-        const redirectPath = (location.state as any)?.from || '/dashboard';
+        const redirectPath = (location.state as { from?: string })?.from || '/dashboard';
         navigate(redirectPath, { replace: true });
       } else {
         setError(t.auth.errorOtp);
       }
-    } catch (err: any) {
-      setError(err?.message || t.auth.errorOtp);
+    } catch (err: unknown) {
+      const anyErr = err as { message?: string };
+      setError(anyErr?.message || t.auth.errorOtp);
     } finally {
       setLoading(false);
     }
@@ -208,8 +225,9 @@ export default function SignIn() {
       setCountdown(60);
       setOtp(['', '', '', '', '', '']);
       otpInputsRef.current[0]?.focus();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to resend OTP. Please try again.');
+    } catch (err: unknown) {
+      const anyErr = err as { message?: string };
+      setError(anyErr?.message || 'Failed to resend OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -228,8 +246,8 @@ export default function SignIn() {
         ? 'ईमेल'
         : 'email'
       : lang === 'hi'
-      ? 'फ़ोन'
-      : 'phone';
+        ? 'फ़ोन'
+        : 'phone';
 
   return (
     <div className="signin-page">

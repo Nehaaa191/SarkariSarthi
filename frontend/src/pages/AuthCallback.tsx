@@ -1,11 +1,26 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, type User } from '../context/AuthContext';
 import { api } from '../lib/api';
 
+/**
+ * AuthCallback — handles the redirect from Google OAuth.
+ *
+ * After the user authorises with Google, the backend redirects here:
+ *   /auth/callback?token=<opaque-handoff-token>
+ *
+ * This page POSTs the token to /auth/exchange-token (via the Vite proxy).
+ * The backend validates it, sets the httpOnly refreshToken cookie, and returns
+ * an accessToken + user. We store the accessToken in memory and navigate to
+ * the dashboard.
+ *
+ * The one-time token expires in 60 seconds — if this page takes longer than
+ * that to load, or the token is missing, we redirect to /signin?error=google_failed.
+ */
 export default function AuthCallback() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const executedRef = useRef(false);
 
   useEffect(() => {
@@ -14,21 +29,36 @@ export default function AuthCallback() {
 
     async function handleCallback() {
       try {
-        const res = await api.post<{ success: boolean; accessToken: string; user: User }>('/auth/refresh');
-        if (res && res.accessToken && res.user) {
+        // Extract the one-time handoff token from the URL query string
+        const params = new URLSearchParams(location.search);
+        const handoffToken = params.get('token');
+
+        if (!handoffToken) {
+          console.error('AuthCallback: no token param in URL');
+          navigate('/signin?error=google_failed', { replace: true });
+          return;
+        }
+
+        // Exchange the one-time token for a real accessToken + httpOnly cookie
+        const res = await api.post<{ success: boolean; accessToken: string; user: User }>(
+          '/auth/exchange-token',
+          { token: handoffToken }
+        );
+
+        if (res?.accessToken && res?.user) {
           login(res.accessToken, res.user);
           navigate('/dashboard', { replace: true });
         } else {
           navigate('/signin?error=google_failed', { replace: true });
         }
       } catch (err) {
-        console.error('Google OAuth callback verification failed:', err);
+        console.error('AuthCallback: exchange-token failed:', err);
         navigate('/signin?error=google_failed', { replace: true });
       }
     }
 
     handleCallback();
-  }, [login, navigate]);
+  }, [login, navigate, location.search]);
 
   return (
     <div
