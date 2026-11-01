@@ -4,7 +4,7 @@ import {
   Send, Mic, MicOff, Volume2, VolumeX, FileText, CheckCircle2,
   AlertCircle, X, Sparkles, LayoutDashboard,
   BookOpen, UserCheck, Shield, FileCheck, Menu, ArrowLeft,
-  Loader2, ExternalLink, ThumbsUp, ThumbsDown
+  Loader2, ThumbsUp, ThumbsDown, Upload
 } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import './Chat.css';
@@ -16,6 +16,14 @@ interface Source {
   page?: string;
   url?: string;
   ministry?: string;
+  excerpt?: string;
+}
+
+interface ActiveDocument {
+  document_id: string;
+  filename: string;
+  page_count: number;
+  chunk_count?: number;
 }
 
 interface Message {
@@ -151,12 +159,15 @@ function MessageBubble({ msg }: { msg: Message }) {
         {msg.sources && msg.sources.length > 0 && (
           <div className="msg-sources">
             {msg.sources.map(src => (
-              <a key={src.id} href={src.url || '#'} className="msg-source-chip" target="_blank" rel="noopener noreferrer">
-                <FileText size={11} />
-                <span>{src.title}</span>
-                {src.page && <span className="src-page">p. {src.page}</span>}
-                <ExternalLink size={10} />
-              </a>
+              <div
+                key={src.id}
+                className="msg-source-chip"
+                title={src.excerpt ? `Page ${src.page || '?'}: "${src.excerpt.slice(0, 200)}..."` : (src.title || 'Official Document')}
+              >
+                <FileText size={12} />
+                <span className="src-title">{src.title}</span>
+                {src.page && <span className="src-page-badge">Page {src.page}</span>}
+              </div>
             ))}
           </div>
         )}
@@ -247,8 +258,15 @@ export default function Chat() {
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Document RAG State
+  const [activeDoc, setActiveDoc] = useState<ActiveDocument | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -259,6 +277,61 @@ export default function Chat() {
       sendMessage(initialQuery);
     }
   }, []);
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setUploadError('Please select a valid PDF file (.pdf).');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError('File size exceeds the 15 MB limit.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || `Upload failed (${res.status})`);
+      }
+
+      const doc = data.document;
+      setActiveDoc(doc);
+
+      // Append assistant announcement
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `📄 **Official Document Indexed:** **${doc.filename}** (${doc.page_count} pages, ${doc.chunk_count} passages).\n\nYou can now ask specific questions. Every answer will be strictly grounded with exact PDF page citations.`,
+          timestamp: new Date(),
+        }
+      ]);
+    } catch (err: any) {
+      setUploadError(err.message || 'Failed to process and index PDF.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   const sendMessage = async (text?: string) => {
     const content = (text || input).trim();
@@ -285,18 +358,55 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      const history = messages.filter(m => !m.loading).map(m => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content,
-      }));
+      if (activeDoc) {
+        // Source-grounded RAG endpoint
+        const res = await fetch('/api/documents/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            document_id: activeDoc.document_id,
+            question: content,
+          }),
+        });
 
-      const reply = await callChatAPI([...history, { role: 'user', content }]);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Failed to answer from document (${res.status})`);
+        }
 
-      setMessages(prev => prev.map(m =>
-        m.id === loadingMsg.id
-          ? { ...m, content: reply, loading: false }
-          : m
-      ));
+        const data = await res.json();
+        const docCitations: Source[] = (data.citations || []).map((c: any, idx: number) => ({
+          id: c.chunk_id || `${c.document_id}_p${c.page}_${idx}`,
+          title: c.filename || activeDoc.filename,
+          page: c.page ? `${c.page}` : undefined,
+          excerpt: c.text,
+        }));
+
+        setMessages(prev => prev.map(m =>
+          m.id === loadingMsg.id
+            ? {
+                ...m,
+                content: data.answer,
+                sources: docCitations,
+                loading: false,
+              }
+            : m
+        ));
+      } else {
+        // General policy assistant endpoint
+        const history = messages.filter(m => !m.loading).map(m => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+        }));
+
+        const reply = await callChatAPI([...history, { role: 'user', content }]);
+
+        setMessages(prev => prev.map(m =>
+          m.id === loadingMsg.id
+            ? { ...m, content: reply, loading: false }
+            : m
+        ));
+      }
     } catch (err: any) {
       setMessages(prev => prev.map(m =>
         m.id === loadingMsg.id
@@ -403,6 +513,22 @@ export default function Chat() {
             </div>
           </div>
           <div className="chat-header-actions">
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".pdf,application/pdf"
+              onChange={handlePdfUpload}
+            />
+            <button
+              className="chat-action-btn upload-doc-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Upload official government policy PDF to query with citations"
+            >
+              {uploading ? <Loader2 size={15} className="spin" /> : <Upload size={15} />}
+              <span>{uploading ? 'Indexing PDF...' : 'Upload Policy PDF'}</span>
+            </button>
             {speaking && (
               <button className="chat-action-btn" onClick={stopSpeaking} id="stop-speaking-btn">
                 <VolumeX size={17} /> Stop
@@ -413,6 +539,54 @@ export default function Chat() {
             </Link>
           </div>
         </div>
+
+        {/* Active Document Banner */}
+        {activeDoc && (
+          <div className="chat-active-doc-banner">
+            <div className="active-doc-left">
+              <FileText size={16} className="active-doc-icon" />
+              <div className="active-doc-details">
+                <span className="active-doc-name">{activeDoc.filename}</span>
+                <span className="active-doc-pages">{activeDoc.page_count} pages indexed · Grounded Q&A</span>
+              </div>
+            </div>
+            <button
+              className="active-doc-close-btn"
+              onClick={() => {
+                setActiveDoc(null);
+                setMessages(prev => [
+                  ...prev,
+                  {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content: 'Cleared active document. Switched back to general policy assistant.',
+                    timestamp: new Date(),
+                  }
+                ]);
+              }}
+              title="Clear active document"
+            >
+              <X size={14} /> Clear Document
+            </button>
+          </div>
+        )}
+
+        {/* Upload Error Banner */}
+        {uploadError && (
+          <div className="chat-upload-error-banner">
+            <div className="upload-error-content">
+              <AlertCircle size={15} />
+              <span>{uploadError}</span>
+            </div>
+            <button
+              className="upload-error-close-btn"
+              onClick={() => setUploadError(null)}
+              aria-label="Dismiss error"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="chat-messages" id="chat-messages" role="log" aria-live="polite">
