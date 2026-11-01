@@ -5,6 +5,13 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from groq import Groq, APIError, RateLimitError, APIConnectionError, AuthenticationError
+from rag import (
+    ingest_pdf_document,
+    answer_question_from_document,
+    get_metadata as get_doc_metadata,
+    list_all_documents,
+    document_exists
+)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -309,6 +316,110 @@ Respond strictly in valid JSON format with this exact structure:
             }],
             "overall": "unverifiable"
         }), 200
+
+
+# ─── Document RAG Endpoints ──────────────────────────────────────────
+
+@app.route("/api/documents/upload", methods=["POST"])
+def upload_document():
+    """Upload and process an official PDF document for source-grounded RAG."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded. Please provide a PDF file."}), 400
+
+    file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"error": "Empty filename."}), 400
+
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Only PDF files are supported."}), 400
+
+    try:
+        metadata = ingest_pdf_document(file.stream, file.filename)
+        return jsonify({
+            "status": "success",
+            "message": "Document processed and indexed successfully.",
+            "document": metadata
+        }), 201
+    except ValueError as ve:
+        logger.warning(f"Validation error during PDF upload: {ve}")
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        logger.exception("Unexpected error during document ingestion")
+        return jsonify({"error": "An internal error occurred while processing the PDF."}), 500
+
+
+@app.route("/api/documents/ask", methods=["POST"])
+def ask_document():
+    """Ask a question about an uploaded document with source citations."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request. JSON body expected."}), 400
+
+    doc_id = str(data.get("document_id", "")).strip()
+    question = str(data.get("question", "")).strip()
+
+    if not doc_id:
+        return jsonify({"error": "Missing 'document_id' in request."}), 400
+
+    if not question:
+        return jsonify({"error": "Missing 'question' in request."}), 400
+
+    if not document_exists(doc_id):
+        return jsonify({"error": f"Document '{doc_id}' not found. Please upload the document first."}), 404
+
+    try:
+        client = get_groq_client()
+    except ValueError as ve:
+        logger.error(f"Configuration error: {ve}")
+        return jsonify({
+            "error": "The AI assistant is temporarily unavailable because the backend API key is not configured.",
+            "details": "Please set GROQ_API_KEY in the backend environment."
+        }), 503
+
+    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "qwen/qwen3.8-27b"
+
+    try:
+        result = answer_question_from_document(
+            doc_id=doc_id,
+            question=question,
+            groq_client=client,
+            model_name=model_name
+        )
+        return jsonify(result), 200
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except FileNotFoundError:
+        return jsonify({"error": "Document not found."}), 404
+    except Exception as e:
+        logger.exception("Error answering question from document")
+        return jsonify({"error": "Failed to generate answer from document."}), 500
+
+
+@app.route("/api/documents/<doc_id>", methods=["GET"])
+def get_document(doc_id):
+    """Retrieve safe metadata for a specific document."""
+    if not document_exists(doc_id):
+        return jsonify({"error": "Document not found."}), 404
+
+    meta = get_doc_metadata(doc_id)
+    if not meta:
+        return jsonify({"error": "Document metadata unavailable."}), 404
+
+    return jsonify({
+        "status": "success",
+        "document": meta
+    }), 200
+
+
+@app.route("/api/documents", methods=["GET"])
+def list_documents():
+    """List all available indexed documents."""
+    docs = list_all_documents()
+    return jsonify({
+        "status": "success",
+        "count": len(docs),
+        "documents": docs
+    }), 200
 
 
 if __name__ == "__main__":

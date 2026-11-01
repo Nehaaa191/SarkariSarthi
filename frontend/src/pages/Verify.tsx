@@ -18,7 +18,7 @@ interface VerifyResult {
   timestamp: Date;
 }
 
-async function verifyClaim(claim: string, apiKey: string): Promise<VerifyResult> {
+async function verifyClaim(claim: string, apiKey: string = ''): Promise<VerifyResult> {
   if (!apiKey) {
     return {
       original: claim,
@@ -135,6 +135,7 @@ export default function Verify() {
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [, setHistory] = useState<VerifyResult[]>([]);
+  const apiKey = '';
 
   const apiKey: string = import.meta.env.VITE_GEMINI_API_KEY ?? '';
 
