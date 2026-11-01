@@ -20,7 +20,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ----- Auth routes -----
-from .auth_routes import api as auth_bp
+from auth_routes import api as auth_bp
 app.register_blueprint(auth_bp, url_prefix="/api")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
