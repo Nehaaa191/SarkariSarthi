@@ -346,43 +346,15 @@
   font-weight: 500;
 }
 
-/* Tabs */
-.auth-tabs {
-  display: flex;
-  gap: 6px;
-  background: var(--bg);
-  padding: 4px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  margin-bottom: 20px;
-}
 
-.auth-tab-btn {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-radius: var(--radius-full);
-  font-family: var(--font-body);
-  font-size: 13px;
+/* Email method label */
+.auth-method-label {
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition);
-}
-
-.auth-tab-btn.active {
-  background: var(--navy);
-  color: #ffffff;
-  box-shadow: var(--shadow-sm);
-}
-
-.auth-tab-btn:hover:not(.active) {
-  color: var(--navy);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
 }
 
 /* Inputs */
@@ -411,47 +383,6 @@
   box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.2);
 }
 
-/* Phone input with integrated prefix */
-.phone-input-container {
-  display: flex;
-  align-items: center;
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
-  background: #ffffff;
-  transition: all var(--transition);
-  overflow: hidden;
-}
-
-.phone-input-container:focus-within {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.2);
-}
-
-.phone-prefix {
-  display: flex;
-  align-items: center;
-  padding: 13px 14px;
-  background: var(--bg);
-  border-right: 1.5px solid var(--border);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--navy);
-  user-select: none;
-}
-
-.phone-input {
-  flex: 1;
-  padding: 13px 16px;
-  border: none;
-  font-size: 15px;
-  font-family: var(--font-body);
-  color: var(--navy);
-  background: transparent;
-}
-
-.phone-input::placeholder {
-  color: var(--text-muted);
-}
 
 /* 6-box OTP Input */
 .otp-inputs-grid {

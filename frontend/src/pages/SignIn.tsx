@@ -8,7 +8,7 @@ import {
   type ClipboardEvent,
 } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Mail, AlertCircle, Phone } from 'lucide-react';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuth, type User } from '../context/AuthContext';
 import { useI18n } from '../i18n/context';
 import { api } from '../lib/api';
@@ -54,7 +54,7 @@ export default function SignIn() {
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Check URL query parameters for google OAuth error
+  // Show error if Google OAuth failed
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('error') === 'google_failed') {
@@ -82,54 +82,35 @@ export default function SignIn() {
   }, [screen]);
 
   const handleGoogleSignIn = () => {
-    // Build Supabase OAuth URL. VITE_SUPABASE_URL must be defined in a .env file at the project root.
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/*$/, "");
-    if (!supabaseUrl) {
-      setError('Supabase URL is not configured. Please check the .env file.');
-      return;
-    }
-    const redirect = `${window.location.origin}/auth/callback`;
-    const googleAuthUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(
-      redirect
-    )}&prompt=select_account`;
-    window.location.href = googleAuthUrl;
+    // In dev: Vite proxies /auth → localhost:3001
+    // In production: VITE_API_BASE points to the deployed backend URL
+    const base = import.meta.env.VITE_API_BASE ?? '';
+    window.location.href = `${base}/auth/google`;
   };
 
   const handleIdentifySubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    let identifierToSend = '';
-    if (activeTab === 'email') {
-      const cleanEmail = email.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!cleanEmail || !emailRegex.test(cleanEmail)) {
-        setError(t.auth.errorInvalid);
-        return;
-      }
-      identifierToSend = cleanEmail;
-    } else {
-      const cleanDigits = phone.replace(/\D/g, '');
-      if (cleanDigits.length !== 10) {
-        setError(t.auth.errorInvalid);
-        return;
-      }
-      identifierToSend = `+91${cleanDigits}`;
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
+      return;
     }
 
     setLoading(true);
     try {
-      await api.post<{ success: boolean; message: string; type: 'email' | 'phone' }>(
+      await api.post<{ success: boolean; message: string; type: string }>(
         '/auth/send-otp',
-        { identifier: identifierToSend }
+        { identifier: cleanEmail }
       );
-      setCurrentIdentifier(identifierToSend);
+      setCurrentIdentifier(cleanEmail);
       setOtp(['', '', '', '', '', '']);
       setCountdown(60);
       setScreen('otp');
-    } catch (err: unknown) {
-      const anyErr = err as { message?: string };
-      setError(anyErr?.message || 'Failed to send OTP. Please try again.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -141,7 +122,6 @@ export default function SignIn() {
     updated[index] = digit;
     setOtp(updated);
     setError(null);
-
     if (digit && index < 5) {
       otpInputsRef.current[index + 1]?.focus();
     }
@@ -170,16 +150,13 @@ export default function SignIn() {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     if (!pasted) return;
-
     const updated = [...otp];
     for (let i = 0; i < 6; i++) {
       updated[i] = pasted[i] || '';
     }
     setOtp(updated);
     setError(null);
-
-    const nextIndex = Math.min(pasted.length, 5);
-    otpInputsRef.current[nextIndex]?.focus();
+    otpInputsRef.current[Math.min(pasted.length, 5)]?.focus();
   };
 
   const handleVerifySubmit = async (e: FormEvent) => {
@@ -200,16 +177,15 @@ export default function SignIn() {
         otp: code,
       });
 
-      if (res && res.accessToken && res.user) {
+      if (res?.accessToken && res?.user) {
         login(res.accessToken, res.user);
-        const redirectPath = (location.state as { from?: string })?.from || '/dashboard';
+        const redirectPath = (location.state as any)?.from || '/dashboard';
         navigate(redirectPath, { replace: true });
       } else {
         setError(t.auth.errorOtp);
       }
-    } catch (err: unknown) {
-      const anyErr = err as { message?: string };
-      setError(anyErr?.message || t.auth.errorOtp);
+    } catch (err: any) {
+      setError(err?.message || t.auth.errorOtp);
     } finally {
       setLoading(false);
     }
@@ -219,15 +195,13 @@ export default function SignIn() {
     if (countdown > 0 || loading) return;
     setLoading(true);
     setError(null);
-
     try {
       await api.post('/auth/send-otp', { identifier: currentIdentifier });
       setCountdown(60);
       setOtp(['', '', '', '', '', '']);
       otpInputsRef.current[0]?.focus();
-    } catch (err: unknown) {
-      const anyErr = err as { message?: string };
-      setError(anyErr?.message || 'Failed to resend OTP. Please try again.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to resend OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -240,14 +214,6 @@ export default function SignIn() {
   };
 
   const isOtpComplete = otp.every((d) => d.length === 1);
-  const typeLabel =
-    activeTab === 'email'
-      ? lang === 'hi'
-        ? 'ईमेल'
-        : 'email'
-      : lang === 'hi'
-        ? 'फ़ोन'
-        : 'phone';
 
   return (
     <div className="signin-page">
@@ -276,15 +242,9 @@ export default function SignIn() {
             </p>
 
             <div className="signin-trust-pills">
-              <div className="signin-trust-pill">
-                <span>✅</span> Source-backed
-              </div>
-              <div className="signin-trust-pill">
-                <span>🌐</span> Bilingual
-              </div>
-              <div className="signin-trust-pill">
-                <span>🛡</span> Private
-              </div>
+              <div className="signin-trust-pill"><span>✅</span> Source-backed</div>
+              <div className="signin-trust-pill"><span>🌐</span> Bilingual</div>
+              <div className="signin-trust-pill"><span>🛡</span> Private</div>
             </div>
           </div>
 
@@ -296,12 +256,10 @@ export default function SignIn() {
 
       {/* ===== RIGHT FORM PANEL ===== */}
       <div className="signin-right">
-        {/* Mobile Header Bar */}
+        {/* Mobile Header */}
         <div className="signin-mobile-header">
           <Link to="/" className="signin-brand">
-            <div className="signin-logo-badge" style={{ width: 36, height: 36, fontSize: 18 }}>
-              🪄
-            </div>
+            <div className="signin-logo-badge" style={{ width: 36, height: 36, fontSize: 18 }}>🪄</div>
             <span className="signin-brand-text" style={{ fontSize: 20 }}>
               <span style={{ color: 'var(--navy)' }}>Sarkari</span>
               <span style={{ color: 'var(--gold-dark)' }}>Saathi</span>
@@ -318,7 +276,7 @@ export default function SignIn() {
                   <p className="auth-subtitle">{t.auth.sub}</p>
                 </div>
 
-                {/* Google Sign-In button */}
+                {/* Google Sign-In */}
                 <button
                   type="button"
                   className="btn-google"
@@ -326,22 +284,10 @@ export default function SignIn() {
                   id="auth-google-btn"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                   </svg>
                   <span>{t.auth.googleBtn}</span>
                 </button>
@@ -350,79 +296,28 @@ export default function SignIn() {
                   <span>{t.auth.orDivider}</span>
                 </div>
 
-                {/* Tabs */}
-                <div className="auth-tabs" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'email'}
-                    className={`auth-tab-btn ${activeTab === 'email' ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveTab('email');
-                      setError(null);
-                    }}
-                    id="auth-tab-email"
-                  >
-                    <Mail size={15} />
-                    <span>{t.auth.emailTab}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'phone'}
-                    className={`auth-tab-btn ${activeTab === 'phone' ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveTab('phone');
-                      setError(null);
-                    }}
-                    id="auth-tab-phone"
-                  >
-                    <Phone size={15} />
-                    <span>{t.auth.phoneTab}</span>
-                  </button>
-                </div>
-
-                {/* Identify Form */}
+                {/* Email OTP form */}
+                <p className="auth-method-label">Or continue with email</p>
                 <form onSubmit={handleIdentifySubmit}>
                   <div className="auth-input-group">
-                    {activeTab === 'email' ? (
-                      <input
-                        type="email"
-                        className="auth-input"
-                        placeholder={t.auth.emailPlaceholder}
-                        value={email}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                          setEmail(e.target.value);
-                          setError(null);
-                        }}
-                        autoFocus
-                        id="auth-email-input"
-                      />
-                    ) : (
-                      <div className="phone-input-container">
-                        <span className="phone-prefix">+91</span>
-                        <input
-                          type="tel"
-                          className="phone-input"
-                          placeholder={t.auth.phonePlaceholder}
-                          value={phone}
-                          maxLength={10}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                            setPhone(val);
-                            setError(null);
-                          }}
-                          autoFocus
-                          id="auth-phone-input"
-                        />
-                      </div>
-                    )}
+                    <input
+                      type="email"
+                      className="auth-input"
+                      placeholder={t.auth.emailPlaceholder}
+                      value={email}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                        setEmail(e.target.value);
+                        setError(null);
+                      }}
+                      autoFocus
+                      id="auth-email-input"
+                    />
                   </div>
 
                   <button
                     type="submit"
                     className="btn-auth-submit"
-                    disabled={loading || (activeTab === 'email' ? !email.trim() : !phone.trim())}
+                    disabled={loading || !email.trim()}
                     id="auth-continue-btn"
                   >
                     {loading ? <div className="btn-spinner" /> : t.auth.continueBtn}
@@ -451,27 +346,23 @@ export default function SignIn() {
                     <ArrowLeft size={18} />
                   </button>
                   <div>
-                    <h2 className="auth-title">
-                      {t.auth.verifyHeading.replace('{type}', typeLabel)}
-                    </h2>
+                    <h2 className="auth-title">Verify your email</h2>
                     <p className="auth-subtitle">
                       {t.auth.verifySub}{' '}
                       <span className="auth-identifier-pill">
-                        {maskIdentifier(currentIdentifier, activeTab)}
+                        {maskEmail(currentIdentifier)}
                       </span>
                     </p>
                   </div>
                 </div>
 
-                {/* OTP Form */}
+                {/* OTP inputs */}
                 <form onSubmit={handleVerifySubmit}>
                   <div className="otp-inputs-grid" onPaste={handleOtpPaste}>
                     {otp.map((val, idx) => (
                       <input
                         key={idx}
-                        ref={(el) => {
-                          otpInputsRef.current[idx] = el;
-                        }}
+                        ref={(el) => { otpInputsRef.current[idx] = el; }}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"

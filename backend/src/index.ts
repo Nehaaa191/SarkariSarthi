@@ -13,12 +13,14 @@ import authRoutes from './routes/auth';
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
-// Allow both Vite development ports
+// Allow both Vite development ports + production frontend URL
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
+  // Production frontend URL from env (set this on Render)
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
 ];
 
 // Shared CORS options
