@@ -19,6 +19,10 @@ app = Flask(__name__)
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+# ----- Auth routes -----
+from auth_routes import api as auth_bp
+app.register_blueprint(auth_bp, url_prefix="/api")
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip()
 
