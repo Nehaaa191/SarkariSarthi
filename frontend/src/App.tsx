@@ -17,7 +17,7 @@ import SignIn from './pages/SignIn';
 import AuthCallback from './pages/AuthCallback';
 
 // Pages that use the full-app layout (no navbar/footer, custom sidebar)
-const APP_PAGES = ['/chat', '/eligibility', '/verify', '/apply', '/signin', '/auth/callback'];
+const APP_PAGES = ['/chat', '/eligibility', '/verify', '/apply', '/signin', '/oauth/callback'];
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -76,7 +76,7 @@ function AppLayout() {
         <Route path="/apply/:id" element={<Apply />} />
         <Route path="/apply" element={<Apply />} />
         <Route path="/signin" element={<SignIn />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/oauth/callback" element={<AuthCallback />} />
         {/* Catch-all */}
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -1,58 +1,40 @@
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import passport from 'passport';
 import { userStore } from '../services/userStore';
 import { otpService } from '../services/otp';
 import { sendOtpEmail } from '../services/mailer';
-import { sendOtpSms } from '../services/sms';
 import { requireAuth } from '../middleware/authMiddleware';
-import { User, IdentifierType } from '../types';
+import { User } from '../types';
 
 const router = Router();
 
-// Strict rate limiters per requirements
+// ---------------------------------------------------------------------------
+// Rate limiters
+// ---------------------------------------------------------------------------
+
 const sendOtpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per 15 minutes per IP
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many OTP requests. Please try again after 15 minutes.' },
 });
 
 const verifyOtpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per 15 minutes per IP
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many verification attempts. Please try again after 15 minutes.' },
 });
 
-// Helper: Parse and validate identifier (email or Indian mobile number)
-function parseIdentifier(input: string): { type: IdentifierType; normalized: string } | null {
-  const trimmed = input.trim();
+// ---------------------------------------------------------------------------
+// Cookie config
+// ---------------------------------------------------------------------------
 
-  // Validate Email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (emailRegex.test(trimmed)) {
-    return { type: 'email', normalized: trimmed.toLowerCase() };
-  }
-
-  // Validate Indian Mobile Phone Number
-  // Strips whitespaces, dashes, and parentheses
-  const cleaned = trimmed.replace(/[\s\-\(\)]/g, '');
-  // Matches 10-digit number with optional +91, 91, or 0 prefix
-  const phoneRegex = /^(?:\+91|91|0)?(\d{10})$/;
-  const match = cleaned.match(phoneRegex);
-  if (match) {
-    const tenDigits = match[1];
-    return { type: 'phone', normalized: `+91${tenDigits}` };
-  }
-
-  return null;
-}
-
-// Cookie helper
 const REFRESH_COOKIE_NAME = 'refreshToken';
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -62,7 +44,10 @@ const REFRESH_COOKIE_OPTIONS = {
   path: '/',
 };
 
-// Token helper
+// ---------------------------------------------------------------------------
+// Token helpers
+// ---------------------------------------------------------------------------
+
 function generateTokens(userId: string): { accessToken: string; refreshToken: string } {
   const jwtSecret = process.env.JWT_SECRET;
   const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET;
@@ -77,54 +62,87 @@ function generateTokens(userId: string): { accessToken: string; refreshToken: st
   return { accessToken, refreshToken };
 }
 
-// User serialization helper to sanitize output
-function sanitizeUser(user: User): User {
+function sanitizeUser(user: User): Omit<User, 'googleId'> {
   return {
     id: user.id,
     email: user.email,
-    phone: user.phone,
     name: user.name,
     avatar: user.avatar,
   };
 }
 
+// ---------------------------------------------------------------------------
+// In-memory one-time token store for the Google OAuth handoff.
+//
+// After Google redirects back to the backend, the backend cannot set a cookie
+// that the frontend (on a different port in dev) will receive automatically.
+// Instead, we generate a short-lived, single-use opaque token, append it to
+// the redirect URL as a query param, and the frontend exchanges it for a
+// proper httpOnly refresh cookie via POST /auth/exchange-token.
+//
+// Tokens expire after 60 seconds and are deleted after first use.
+// ---------------------------------------------------------------------------
+
+interface OauthHandoffRecord {
+  userId: string;
+  expiresAt: number;
+}
+
+const oauthHandoffStore = new Map<string, OauthHandoffRecord>();
+
+function createOauthHandoffToken(userId: string): string {
+  const token = crypto.randomBytes(32).toString('hex');
+  oauthHandoffStore.set(token, {
+    userId,
+    expiresAt: Date.now() + 60 * 1000, // 60 second TTL
+  });
+  return token;
+}
+
+function consumeOauthHandoffToken(token: string): string | null {
+  const record = oauthHandoffStore.get(token);
+  oauthHandoffStore.delete(token); // always delete — single use
+  if (!record || Date.now() > record.expiresAt) {
+    return null;
+  }
+  return record.userId;
+}
+
+// ---------------------------------------------------------------------------
+// Email OTP — POST /auth/send-otp
+// ---------------------------------------------------------------------------
+
 /**
  * POST /auth/send-otp
- * Body: { identifier: string }
- * Response: { success: true, message: string, type: 'email'|'phone' }
- * Error: { success: false, message: string }
+ * Body: { identifier: string }  — must be a valid email address
+ * Response: { success: true, message: string }
  */
 router.post('/send-otp', sendOtpLimiter, async (req: Request, res: Response) => {
   try {
     const { identifier } = req.body;
 
     if (!identifier || typeof identifier !== 'string') {
-      res.status(400).json({ success: false, message: 'Identifier is required' });
+      res.status(400).json({ success: false, message: 'Email address is required' });
       return;
     }
 
-    const parsed = parseIdentifier(identifier);
-    if (!parsed) {
+    const email = identifier.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid identifier. Please provide a valid email or 10-digit Indian mobile number.',
+        message: 'Invalid email address. Please enter a valid email.',
       });
       return;
     }
 
-    const { type, normalized } = parsed;
-    const otp = otpService.generateAndStore(normalized);
-
-    if (type === 'email') {
-      await sendOtpEmail(normalized, otp);
-    } else {
-      await sendOtpSms(normalized, otp);
-    }
+    const otp = otpService.generateAndStore(email);
+    await sendOtpEmail(email, otp);
 
     res.json({
       success: true,
-      message: `OTP sent successfully to your ${type === 'email' ? 'email' : 'phone'}`,
-      type,
+      message: 'OTP sent successfully to your email',
+      type: 'email',
     });
   } catch (err: any) {
     res.status(400).json({
@@ -134,19 +152,22 @@ router.post('/send-otp', sendOtpLimiter, async (req: Request, res: Response) => 
   }
 });
 
+// ---------------------------------------------------------------------------
+// Email OTP — POST /auth/verify-otp
+// ---------------------------------------------------------------------------
+
 /**
  * POST /auth/verify-otp
  * Body: { identifier: string, otp: string }
  * Response: { success: true, accessToken: string, user: User }
  * Sets httpOnly cookie: refreshToken (7 days)
- * Error: { success: false, message: string }
  */
 router.post('/verify-otp', verifyOtpLimiter, async (req: Request, res: Response) => {
   try {
     const { identifier, otp } = req.body;
 
     if (!identifier || typeof identifier !== 'string') {
-      res.status(400).json({ success: false, message: 'Identifier is required' });
+      res.status(400).json({ success: false, message: 'Email address is required' });
       return;
     }
 
@@ -155,37 +176,26 @@ router.post('/verify-otp', verifyOtpLimiter, async (req: Request, res: Response)
       return;
     }
 
-    const parsed = parseIdentifier(identifier);
-    if (!parsed) {
+    const email = identifier.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       res.status(400).json({
         success: false,
-        message: 'Invalid identifier. Please provide a valid email or 10-digit Indian mobile number.',
+        message: 'Invalid email address.',
       });
       return;
     }
 
-    const { type, normalized } = parsed;
-
-    // Verify OTP (throws descriptive errors if invalid, expired, or attempts exceeded)
-    otpService.verify(normalized, otp.trim());
+    // Verify OTP (throws on invalid / expired / max-attempts)
+    otpService.verify(email, otp.trim());
 
     // Find or create user
-    let user: User | undefined;
-    if (type === 'email') {
-      user = userStore.findByEmail(normalized);
-      if (!user) {
-        user = userStore.create({ email: normalized });
-      }
-    } else {
-      user = userStore.findByPhone(normalized);
-      if (!user) {
-        user = userStore.create({ phone: normalized });
-      }
+    let user = userStore.findByEmail(email);
+    if (!user) {
+      user = userStore.create({ email });
     }
 
     const { accessToken, refreshToken } = generateTokens(user.id);
-
-    // Set refreshToken cookie
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
 
     res.json({
@@ -201,9 +211,13 @@ router.post('/verify-otp', verifyOtpLimiter, async (req: Request, res: Response)
   }
 });
 
+// ---------------------------------------------------------------------------
+// Google OAuth — GET /auth/google
+// ---------------------------------------------------------------------------
+
 /**
  * GET /auth/google
- * Redirects to Google OAuth consent screen
+ * Redirects to Google's OAuth consent screen.
  */
 router.get(
   '/google',
@@ -213,11 +227,24 @@ router.get(
   })
 );
 
+// ---------------------------------------------------------------------------
+// Google OAuth — GET /auth/google/callback
+// ---------------------------------------------------------------------------
+
 /**
  * GET /auth/google/callback
- * Handled by Passport
- * On success: sets refresh cookie, redirects to FRONTEND_URL/auth/callback
- * On failure: redirects to FRONTEND_URL/signin?error=google_failed
+ *
+ * Google redirects here after the user consents.
+ *
+ * IMPORTANT — why we use a one-time handoff token instead of a cookie:
+ * In development the backend (port 3001) and frontend (port 5174) are on
+ * different origins. The browser follows the Google redirect directly to
+ * localhost:3001 (not through the Vite proxy), so any cookie set here is
+ * scoped to localhost:3001 and never sent to localhost:5174.
+ *
+ * Solution: generate a short-lived (60s), single-use opaque token, append it
+ * to the redirect URL, and let AuthCallback call POST /auth/exchange-token to
+ * swap it for a proper httpOnly refresh cookie + access token.
  */
 router.get(
   '/google/callback',
@@ -237,17 +264,69 @@ router.get(
       return;
     }
 
-    const { refreshToken } = generateTokens(user.id);
-    res.cookie(REFRESH_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
-    res.redirect(`${frontendUrl}/auth/callback`);
+    // Create one-time handoff token (60s TTL, single-use)
+    const handoffToken = createOauthHandoffToken(user.id);
+
+    // Redirect to frontend with the opaque token in the URL.
+    // Use /oauth/callback (not /auth/callback) so Vite's /auth proxy rule
+    // doesn't intercept this frontend page navigation.
+    res.redirect(`${frontendUrl}/oauth/callback?token=${handoffToken}`);
   }
 );
 
+// ---------------------------------------------------------------------------
+// Google OAuth — POST /auth/exchange-token
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /auth/exchange-token
+ * Body: { token: string }  — the opaque one-time token from the OAuth redirect
+ *
+ * Validates and consumes the handoff token, then:
+ *   - Sets httpOnly refreshToken cookie
+ *   - Returns { success: true, accessToken, user }
+ *
+ * Token expires after 60 seconds and is deleted on first use.
+ */
+router.post('/exchange-token', (req: Request, res: Response) => {
+  const { token } = req.body;
+
+  if (!token || typeof token !== 'string') {
+    res.status(400).json({ success: false, message: 'Token is required' });
+    return;
+  }
+
+  const userId = consumeOauthHandoffToken(token.trim());
+  if (!userId) {
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+    return;
+  }
+
+  const user = userStore.findById(userId);
+  if (!user) {
+    res.status(401).json({ success: false, message: 'User not found' });
+    return;
+  }
+
+  const { accessToken, refreshToken } = generateTokens(user.id);
+
+  // Cookie is now set on the same origin the frontend uses (via the Vite proxy)
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
+
+  res.json({
+    success: true,
+    accessToken,
+    user: sanitizeUser(user),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/refresh
+// ---------------------------------------------------------------------------
+
 /**
  * POST /auth/refresh
- * Reads refreshToken cookie
- * Response: { success: true, accessToken: string, user: User }
- * Error 401: { success: false, message: 'No refresh token' }
+ * Reads httpOnly refreshToken cookie, returns a new access token + user.
  */
 router.post('/refresh', (req: Request, res: Response) => {
   const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
@@ -267,7 +346,7 @@ router.post('/refresh', (req: Request, res: Response) => {
 
   try {
     const decoded = jwt.verify(refreshToken, jwtRefreshSecret) as { userId: string };
-    if (!decoded || !decoded.userId) {
+    if (!decoded?.userId) {
       res.status(401).json({ success: false, message: 'Invalid refresh token' });
       return;
     }
@@ -285,26 +364,32 @@ router.post('/refresh', (req: Request, res: Response) => {
       accessToken,
       user: sanitizeUser(user),
     });
-  } catch (err: any) {
+  } catch {
     res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /auth/logout
+// ---------------------------------------------------------------------------
+
 /**
  * POST /auth/logout
- * Clears refreshToken cookie
- * Response: { success: true }
+ * Clears the httpOnly refreshToken cookie.
  */
 router.post('/logout', (_req: Request, res: Response) => {
   res.clearCookie(REFRESH_COOKIE_NAME, { path: '/' });
   res.json({ success: true });
 });
 
+// ---------------------------------------------------------------------------
+// GET /auth/me
+// ---------------------------------------------------------------------------
+
 /**
  * GET /auth/me
- * Header: Authorization: Bearer <accessToken>
- * Response: { success: true, user: User }
- * Error 401 if invalid token
+ * Requires Authorization: Bearer <accessToken>
+ * Returns { success: true, user }
  */
 router.get('/me', requireAuth, (req: Request, res: Response) => {
   const user = req.user as User | undefined;
@@ -312,11 +397,7 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
     res.status(401).json({ success: false, message: 'Unauthorized' });
     return;
   }
-
-  res.json({
-    success: true,
-    user: sanitizeUser(user),
-  });
+  res.json({ success: true, user: sanitizeUser(user) });
 });
 
 export default router;

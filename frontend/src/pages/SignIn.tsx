@@ -8,39 +8,30 @@ import {
   type ClipboardEvent,
 } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mail, AlertCircle } from 'lucide-react';
 import { useAuth, type User } from '../context/AuthContext';
 import { useI18n } from '../i18n/context';
 import { api } from '../lib/api';
 import './SignIn.css';
 
 type AuthScreen = 'identify' | 'otp';
-type AuthTab = 'email' | 'phone';
 
-function maskIdentifier(id: string, type: AuthTab): string {
-  if (type === 'email') {
-    const atIndex = id.indexOf('@');
-    if (atIndex > 1) {
-      return `${id[0]}***${id.slice(atIndex)}`;
-    }
-    return id;
-  } else {
-    const digits = id.replace(/\D/g, '');
-    const last4 = digits.slice(-4);
-    return `+91 XXXXXX${last4}`;
+function maskEmail(email: string): string {
+  const atIndex = email.indexOf('@');
+  if (atIndex > 1) {
+    return `${email[0]}***${email.slice(atIndex)}`;
   }
+  return email;
 }
 
 export default function SignIn() {
   const { login } = useAuth();
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [screen, setScreen] = useState<AuthScreen>('identify');
-  const [activeTab, setActiveTab] = useState<AuthTab>('email');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [currentIdentifier, setCurrentIdentifier] = useState('');
   const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -53,11 +44,11 @@ export default function SignIn() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('error') === 'google_failed') {
-      setError('Google sign-in was unsuccessful. Please try again or use email/phone.');
+      setError('Google sign-in was unsuccessful. Please try again or use email OTP.');
     }
   }, [location.search]);
 
-  // Handle countdown timer for OTP screen
+  // Countdown timer on OTP screen
   useEffect(() => {
     if (screen !== 'otp' || countdown <= 0) return;
     const interval = setInterval(() => {
@@ -66,7 +57,7 @@ export default function SignIn() {
     return () => clearInterval(interval);
   }, [screen, countdown]);
 
-  // Focus the first OTP input when switching to OTP screen
+  // Focus first OTP input when entering OTP screen
   useEffect(() => {
     if (screen === 'otp') {
       const timer = setTimeout(() => {
