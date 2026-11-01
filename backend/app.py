@@ -17,28 +17,15 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Initialize database
-from .db import db
-db.init_app(app)
-
-# Load models so SQLAlchemy knows about them
-with app.app_context():
-    from . import models
-    db.create_all()
-
 # Enable CORS for frontend requests
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ----- Auth routes -----
-from .auth_routes import api as auth_bp
-from .db import db
-
-# Initialize extensions
-db.init_app(app)
+from auth_routes import api as auth_bp
 app.register_blueprint(auth_bp, url_prefix="/api")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-8b-8192").strip()
 
 # Primary Government Schemes Context for Saathi AI
 SCHEMES_CONTEXT = """You are Saathi AI — an expert AI companion for Indian government schemes and civic policies.
@@ -183,7 +170,7 @@ def chat():
         if m["role"] != "system":
             messages_payload.append(m)
 
-    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "qwen/qwen3.8-27b"
+    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "llama3-8b-8192"
 
     try:
         client = get_groq_client()
@@ -254,7 +241,7 @@ def verify_claim():
     if not claim:
         return jsonify({"error": "Claim text cannot be empty."}), 400
 
-    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "qwen/qwen3.8-27b"
+    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "llama3-8b-8192"
 
     prompt = f"""You are a fact-checker for Indian government schemes.
 
