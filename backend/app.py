@@ -17,25 +17,10 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Enable CORS — allow deployed frontend and local dev
-_allowed_origins = [
-    "https://sarkarisathi.onrender.com",
-    "https://sarkarisarth1.onrender.com",  # keep old in case of typo in DNS
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-# Also allow any origin specified via env var (e.g. if frontend URL changes)
-_frontend_env = os.getenv("FRONTEND_URL", "").strip()
-if _frontend_env and _frontend_env not in _allowed_origins:
-    _allowed_origins.append(_frontend_env)
-
-CORS(
-    app,
-    resources={r"/api/*": {"origins": _allowed_origins}},
-    supports_credentials=True,
-    allow_headers=["Content-Type", "Authorization"],
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-)
+# CORS — allow all origins (safe since auth uses Bearer tokens, not cookies)
+CORS(app, resources={r"/api/*": {"origins": "*"}},
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # ----- Auth routes -----
 from auth_routes import api as auth_bp
