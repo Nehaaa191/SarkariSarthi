@@ -42,7 +42,7 @@ interface EligResult {
 const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) ?? '').replace(/\/+$/, '');
 
 async function callChatAPI(messages: Array<{ role: string; content: string }>): Promise<string> {
-  const endpoint = `${API_BASE}/api/chat`;
+  const endpoint = `${API_BASE}/chat`;
 
   const res = await fetch(endpoint, {
     method: 'POST',
