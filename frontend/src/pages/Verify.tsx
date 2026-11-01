@@ -6,7 +6,7 @@ import './Verify.css';
 
 interface SubClaim {
   text: string;
-  verdict: 'verified' | 'misleading' | 'false' | 'unverifiable' | 'outdated';
+  verdict: 'verified' | 'partially_correct' | 'misleading' | 'false' | 'unverifiable' | 'outdated';
   evidence?: string;
   source?: string;
 }
@@ -18,98 +18,80 @@ interface VerifyResult {
   timestamp: Date;
 }
 
-async function verifyClaim(claim: string, apiKey: string = ''): Promise<VerifyResult> {
-  if (!apiKey) {
-    return {
-      original: claim,
-      overall: 'unverifiable',
-      subClaims: [{
-        text: claim,
-        verdict: 'unverifiable',
-        evidence: 'Automated claim verification requires an active Gemini AI connection. Connect your API key in Chat to enable live analysis, or verify directly with official government portals.',
-        source: 'Official portals',
-      }],
-      timestamp: new Date(),
-    };
-  }
-
-  // Use Gemini to decompose and verify
-  const prompt = `You are a fact-checker for Indian government schemes.
-
-Claim to verify: "${claim}"
-
-Task: 
-1. Decompose this claim into atomic sub-claims
-2. For each sub-claim, evaluate against verified government scheme data:
-   - VERIFIED: matches official data
-   - MISLEADING: technically not wrong but misleads
-   - FALSE: directly contradicts official data
-   - UNVERIFIABLE: cannot be confirmed from official sources
-   - OUTDATED: may have been correct before but is now changed
-
-Respond in JSON:
-{
-  "subClaims": [
-    {"text": "sub-claim text", "verdict": "VERIFIED|MISLEADING|FALSE|UNVERIFIABLE|OUTDATED", "evidence": "explanation", "source": "official portal"}
-  ],
-  "overall": "verified|partially_correct|misleading|false|unverifiable"
-}`;
-
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 512 }
-        })
-      }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const subClaims: SubClaim[] = parsed.subClaims.map((sc: { text: string; verdict?: string; evidence?: string; source?: string }) => ({
-          text: sc.text,
-          verdict: (sc.verdict || 'unverifiable').toLowerCase().replace('_', '') as SubClaim['verdict'],
-          evidence: sc.evidence,
-          source: sc.source,
-        }));
-        return {
-          original: claim,
-          overall: parsed.overall || inferOverall(subClaims),
-          subClaims,
-          timestamp: new Date(),
-        };
-      }
-    }
-  } catch {
-    // API failure fallback
-  }
-
-  return {
-    original: claim,
-    overall: 'unverifiable',
-    subClaims: [{
-      text: claim,
-      verdict: 'unverifiable',
-      evidence: 'Could not complete automated verification against official sources. Always verify critical information directly on official government portals.',
-      source: 'Official portals',
-    }],
-    timestamp: new Date(),
-  };
+function normalizeVerdict(val: unknown): SubClaim['verdict'] {
+  if (typeof val !== 'string') return 'unverifiable';
+  const clean = val.toLowerCase().trim().replace(/[\s-]+/g, '_');
+  if (clean === 'verified') return 'verified';
+  if (clean === 'partially_correct' || clean === 'partial') return 'partially_correct';
+  if (clean === 'misleading') return 'misleading';
+  if (clean === 'false' || clean === 'incorrect') return 'false';
+  if (clean === 'outdated') return 'outdated';
+  return 'unverifiable';
 }
 
 function inferOverall(subs: SubClaim[]): VerifyResult['overall'] {
+  if (subs.length === 0) return 'unverifiable';
   if (subs.every(s => s.verdict === 'verified')) return 'verified';
   if (subs.some(s => s.verdict === 'false')) return 'false';
   if (subs.some(s => s.verdict === 'misleading')) return 'misleading';
   if (subs.every(s => s.verdict === 'unverifiable')) return 'unverifiable';
   return 'partially_correct';
+}
+
+function normalizeOverall(val: unknown, subs: SubClaim[]): VerifyResult['overall'] {
+  if (typeof val === 'string') {
+    const clean = val.toLowerCase().trim().replace(/[\s-]+/g, '_');
+    if (clean === 'verified') return 'verified';
+    if (clean === 'partially_correct' || clean === 'partial') return 'partially_correct';
+    if (clean === 'misleading') return 'misleading';
+    if (clean === 'false' || clean === 'incorrect') return 'false';
+    if (clean === 'unverifiable') return 'unverifiable';
+  }
+  return inferOverall(subs);
+}
+
+async function verifyClaim(claim: string): Promise<VerifyResult> {
+  const res = await fetch('/api/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ claim }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Verification service returned status ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid response received from verification service.');
+  }
+
+  const rawSubClaims = Array.isArray(data.subClaims) ? data.subClaims : [];
+  const subClaims: SubClaim[] = rawSubClaims.map((sc: any) => ({
+    text: sc.text || claim,
+    verdict: normalizeVerdict(sc.verdict),
+    evidence: sc.evidence || 'No detailed evidence returned by service.',
+    source: sc.source || 'Scheme Guidelines',
+  }));
+
+  if (subClaims.length === 0) {
+    subClaims.push({
+      text: claim,
+      verdict: normalizeVerdict(data.overall),
+      evidence: 'No specific sub-claims were decomposed for this statement.',
+      source: 'Scheme Guidelines',
+    });
+  }
+
+  const overall = normalizeOverall(data.overall, subClaims);
+
+  return {
+    original: claim,
+    overall,
+    subClaims,
+    timestamp: new Date(),
+  };
 }
 
 const verdictConfig = {
@@ -134,20 +116,28 @@ export default function Verify() {
   const [input, setInput] = useState('');
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [, setHistory] = useState<VerifyResult[]>([]);
-  const apiKey = '';
-
-  const apiKey: string = import.meta.env.VITE_GEMINI_API_KEY ?? '';
 
   const verify = async (claim?: string) => {
     const text = (claim || input).trim();
-    if (!text) return;
+    if (!text) {
+      setError('Please enter a claim or statement to verify.');
+      return;
+    }
     setLoading(true);
+    setError(null);
     setResult(null);
-    const r = await verifyClaim(text, apiKey);
-    setResult(r);
-    setHistory(prev => [r, ...prev].slice(0, 5));
-    setLoading(false);
+
+    try {
+      const r = await verifyClaim(text);
+      setResult(r);
+      setHistory(prev => [r, ...prev].slice(0, 5));
+    } catch (err: any) {
+      setError(err?.message || 'Could not connect to the verification service. Please ensure the backend server is running.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const overallCfg = result ? verdictConfig[result.overall] : null;
@@ -174,20 +164,23 @@ export default function Verify() {
       <div className="verify-content">
         <div className="verify-left">
           <h1 className="verify-h1">Verify a claim</h1>
-          <p className="verify-sub">Paste any statement or social media claim about a government scheme. We'll verify it against official sources.</p>
+          <p className="verify-sub">Paste any statement or social media claim about a government scheme. We'll analyze it against known policy guidelines.</p>
 
-          {!apiKey && (
-            <div style={{
-              padding: '10px 14px',
-              background: 'var(--yellow-light)',
-              border: '1px solid var(--yellow)',
+          {error && (
+            <div className="verify-error-banner" style={{
+              padding: '12px 16px',
+              background: '#FEF2F2',
+              border: '1px solid #FECACA',
               borderRadius: 'var(--radius-md)',
-              fontSize: '12.5px',
-              color: 'var(--navy)',
+              color: '#991B1B',
+              fontSize: '13px',
               marginBottom: '14px',
-              lineHeight: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
             }}>
-              ℹ️ Live AI claim verification requires a Gemini API key. You can connect your free API key in <Link to="/chat" style={{ fontWeight: 700, textDecoration: 'underline' }}>Chat</Link>.
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>{error}</span>
             </div>
           )}
 
@@ -195,7 +188,10 @@ export default function Verify() {
             className="verify-textarea"
             placeholder="Paste the claim or statement here..."
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              setInput(e.target.value);
+              if (error) setError(null);
+            }}
             rows={4}
             id="verify-input"
           />
@@ -224,7 +220,7 @@ export default function Verify() {
           {loading && (
             <div className="verify-loading">
               <Loader2 size={32} className="spin" />
-              <p>Analyzing claim against official scheme data...</p>
+              <p>Analyzing claim against scheme guidelines...</p>
             </div>
           )}
 
@@ -262,16 +258,24 @@ export default function Verify() {
               </div>
 
               <div className="vr-disclaimer">
-                Always verify critical information directly on official government portals before making decisions.
+                Note: Analysis is evaluated against known scheme guidelines. Always verify critical information directly on official government portals before making decisions.
               </div>
             </div>
           )}
 
-          {!loading && !result && (
+          {!loading && !result && error && (
+            <div className="verify-empty" style={{ borderColor: '#FECACA' }}>
+              <AlertCircle size={44} className="verify-empty-icon" style={{ color: '#EF4444' }} />
+              <h3>Verification Service Unavailable</h3>
+              <p style={{ color: '#991B1B' }}>{error}</p>
+            </div>
+          )}
+
+          {!loading && !result && !error && (
             <div className="verify-empty">
               <Shield size={48} className="verify-empty-icon" />
               <h3>Fact-check government claims</h3>
-              <p>Paste any claim about a government scheme on the left and we'll verify it against official sources.</p>
+              <p>Paste any claim about a government scheme on the left to analyze it against policy guidelines.</p>
             </div>
           )}
         </div>
