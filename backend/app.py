@@ -8,6 +8,7 @@ from groq import Groq, APIError, RateLimitError, APIConnectionError, Authenticat
 from rag import (
     ingest_pdf_document,
     answer_question_from_document,
+    verify_claim_against_document,
     get_metadata as get_doc_metadata,
     list_all_documents,
     document_exists
@@ -241,7 +242,7 @@ def chat():
 
 @app.route("/api/verify", methods=["POST"])
 def verify_claim():
-    """Verify policy claim endpoint using Groq."""
+    """Verify policy claim endpoint using Groq and optional RAG document grounding."""
     data = request.get_json(silent=True)
     if not data or "claim" not in data:
         return jsonify({"error": "Missing 'claim' in request body."}), 400
@@ -252,6 +253,89 @@ def verify_claim():
 
     model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "llama3-8b-8192"
 
+    # Stage 2: RAG-Grounded Claim Verification if document_id is provided in request
+    if "document_id" in data:
+        raw_doc_id = data.get("document_id")
+        doc_id = str(raw_doc_id).strip() if raw_doc_id is not None else ""
+
+        # Missing or empty document_id: never generate VERIFIED or FALSE
+        if not doc_id:
+            return jsonify({
+                "error": "Missing or empty 'document_id'. Please select a valid document for verification.",
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": "No document ID was provided for verification.",
+                    "source": "N/A"
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": []
+            }), 400
+
+        # Invalid document_id: never generate VERIFIED or FALSE
+        if not document_exists(doc_id):
+            return jsonify({
+                "error": f"Document '{doc_id}' not found.",
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": f"Document '{doc_id}' does not exist on the server.",
+                    "source": "N/A"
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": []
+            }), 404
+
+        # Document exists -> verify strictly against this document
+        try:
+            client = get_groq_client()
+        except Exception as e:
+            logger.error(f"Groq client unavailable: {e}")
+            meta = get_doc_metadata(doc_id) or {}
+            filename = meta.get("filename", "document.pdf")
+            return jsonify({
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": "Verification service unavailable at this moment. Please check official government portals.",
+                    "source": filename
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": [],
+                "document_id": doc_id,
+                "filename": filename
+            }), 200
+
+        try:
+            result = verify_claim_against_document(
+                doc_id=doc_id,
+                claim=claim,
+                groq_client=client,
+                model_name=model_name
+            )
+            return jsonify(result), 200
+        except Exception as e:
+            logger.exception(f"Error in verify_claim_against_document for doc {doc_id}")
+            meta = get_doc_metadata(doc_id) or {}
+            filename = meta.get("filename", "document.pdf")
+            return jsonify({
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": "An error occurred while verifying the claim against the document.",
+                    "source": filename
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": [],
+                "document_id": doc_id,
+                "filename": filename
+            }), 200
+
+    # Backwards compatibility: General scheme verification when document_id is not specified in request
     prompt = f"""You are a fact-checker for Indian government schemes.
 
 Claim to verify: "{claim}"

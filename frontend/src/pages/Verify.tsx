@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Shield, CheckCircle2, AlertCircle, X, Loader2, ArrowLeft, ExternalLink, Info, Menu } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Shield, CheckCircle2, AlertCircle, X, Loader2, ArrowLeft, ExternalLink, Info, Menu, FileText, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFeaturesDrawer } from '../context/FeaturesDrawerContext';
 import './Verify.css';
@@ -11,11 +11,31 @@ interface SubClaim {
   source?: string;
 }
 
+export interface Citation {
+  document_id: string;
+  filename: string;
+  page: number;
+  text: string;
+  similarity_score?: number;
+}
+
+export interface DocMeta {
+  document_id: string;
+  filename: string;
+  page_count: number;
+  chunk_count?: number;
+  uploaded_at?: string;
+}
+
 interface VerifyResult {
   original: string;
   overall: 'verified' | 'partially_correct' | 'misleading' | 'false' | 'unverifiable';
   subClaims: SubClaim[];
   timestamp: Date;
+  citations?: Citation[];
+  sufficient_evidence?: boolean;
+  document_id?: string;
+  filename?: string;
 }
 
 function normalizeVerdict(val: unknown): SubClaim['verdict'] {
@@ -50,11 +70,16 @@ function normalizeOverall(val: unknown, subs: SubClaim[]): VerifyResult['overall
   return inferOverall(subs);
 }
 
-async function verifyClaim(claim: string): Promise<VerifyResult> {
+async function verifyClaim(claim: string, documentId?: string): Promise<VerifyResult> {
+  const payload: { claim: string; document_id?: string } = { claim };
+  if (documentId) {
+    payload.document_id = documentId;
+  }
+
   const res = await fetch('/api/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ claim }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -72,7 +97,7 @@ async function verifyClaim(claim: string): Promise<VerifyResult> {
     text: sc.text || claim,
     verdict: normalizeVerdict(sc.verdict),
     evidence: sc.evidence || 'No detailed evidence returned by service.',
-    source: sc.source || 'Scheme Guidelines',
+    source: sc.source || data.filename || 'Scheme Guidelines',
   }));
 
   if (subClaims.length === 0) {
@@ -80,17 +105,30 @@ async function verifyClaim(claim: string): Promise<VerifyResult> {
       text: claim,
       verdict: normalizeVerdict(data.overall),
       evidence: 'No specific sub-claims were decomposed for this statement.',
-      source: 'Scheme Guidelines',
+      source: data.filename || 'Scheme Guidelines',
     });
   }
 
   const overall = normalizeOverall(data.overall, subClaims);
+
+  const rawCitations = Array.isArray(data.citations) ? data.citations : [];
+  const citations: Citation[] = rawCitations.map((c: any) => ({
+    document_id: c.document_id || data.document_id || '',
+    filename: c.filename || data.filename || 'Official Document',
+    page: Number(c.page) || 1,
+    text: String(c.text || ''),
+    similarity_score: typeof c.similarity_score === 'number' ? c.similarity_score : undefined,
+  }));
 
   return {
     original: claim,
     overall,
     subClaims,
     timestamp: new Date(),
+    citations,
+    sufficient_evidence: data.sufficient_evidence,
+    document_id: data.document_id,
+    filename: data.filename,
   };
 }
 
@@ -118,6 +156,34 @@ export default function Verify() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, setHistory] = useState<VerifyResult[]>([]);
+  const [documents, setDocuments] = useState<DocMeta[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState<string>('');
+  const [, setDocsLoading] = useState<boolean>(true);
+
+  // Load indexed official PDF documents for source grounding
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchDocuments() {
+      try {
+        const res = await fetch('/api/documents');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data && Array.isArray(data.documents)) {
+            setDocuments(data.documents);
+            if (data.documents.length > 0 && !selectedDocId) {
+              setSelectedDocId(data.documents[0].document_id);
+            }
+          }
+        }
+      } catch {
+        // Fallback gracefully if document listing fails
+      } finally {
+        if (isMounted) setDocsLoading(false);
+      }
+    }
+    fetchDocuments();
+    return () => { isMounted = false; };
+  }, []);
 
   const verify = async (claim?: string) => {
     const text = (claim || input).trim();
@@ -130,7 +196,7 @@ export default function Verify() {
     setResult(null);
 
     try {
-      const r = await verifyClaim(text);
+      const r = await verifyClaim(text, selectedDocId || undefined);
       setResult(r);
       setHistory(prev => [r, ...prev].slice(0, 5));
     } catch (err: any) {
@@ -164,7 +230,37 @@ export default function Verify() {
       <div className="verify-content">
         <div className="verify-left">
           <h1 className="verify-h1">Verify a claim</h1>
-          <p className="verify-sub">Paste any statement or social media claim about a government scheme. We'll analyze it against known policy guidelines.</p>
+          <p className="verify-sub">Paste any statement or social media claim about a government scheme. Grounded strictly in official scheme PDFs.</p>
+
+          {/* Document Selector for Ground Truth */}
+          <div className="verify-doc-group">
+            <label htmlFor="verify-doc-select" className="verify-doc-label">
+              <FileText size={15} /> Select Official Reference Document
+            </label>
+            <div className="verify-doc-select-wrapper">
+              <select
+                id="verify-doc-select"
+                className="verify-doc-select"
+                value={selectedDocId}
+                onChange={e => {
+                  setSelectedDocId(e.target.value);
+                  if (error) setError(null);
+                }}
+              >
+                <option value="">-- General Knowledge Base (No Document) --</option>
+                {documents.map(d => (
+                  <option key={d.document_id} value={d.document_id}>
+                    {d.filename} ({d.page_count} {d.page_count === 1 ? 'page' : 'pages'})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedDocId && (
+              <div className="verify-doc-hint">
+                <span>✓</span> Claims will be evaluated strictly against this uploaded PDF with page-numbered citations.
+              </div>
+            )}
+          </div>
 
           {error && (
             <div className="verify-error-banner" style={{
@@ -220,7 +316,7 @@ export default function Verify() {
           {loading && (
             <div className="verify-loading">
               <Loader2 size={32} className="spin" />
-              <p>Analyzing claim against scheme guidelines...</p>
+              <p>Analyzing claim against document evidence...</p>
             </div>
           )}
 
@@ -232,6 +328,22 @@ export default function Verify() {
                   {overallCfg.icon}
                   <span className="vr-verdict-label">{overallCfg.label}</span>
                 </div>
+                {result.filename && (
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    color: 'var(--navy)',
+                    background: 'rgba(23, 37, 84, 0.08)',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    marginBottom: '8px'
+                  }}>
+                    <FileText size={12} /> Grounded in: {result.filename}
+                  </div>
+                )}
                 <p className="vr-claim-text">"{result.original}"</p>
               </div>
 
@@ -257,8 +369,31 @@ export default function Verify() {
                 })}
               </div>
 
+              {/* Retrieved Document Citations */}
+              {result.citations && result.citations.length > 0 && (
+                <div className="vr-citations-section">
+                  <h3 className="vr-citations-title">
+                    <BookOpen size={15} /> Retrieved Evidence Citations ({result.citations.length})
+                  </h3>
+                  <div className="vr-citations-list">
+                    {result.citations.map((c, i) => (
+                      <div key={i} className="vr-citation-card">
+                        <div className="vr-citation-header">
+                          <span className="vr-cit-file"><FileText size={12} /> {c.filename}</span>
+                          <span className="vr-cit-page">Page {c.page}</span>
+                          {typeof c.similarity_score === 'number' && (
+                            <span className="vr-cit-score">{Math.round(c.similarity_score * 100)}% match</span>
+                          )}
+                        </div>
+                        <p className="vr-citation-text">"{c.text}"</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="vr-disclaimer">
-                Note: Analysis is evaluated against known scheme guidelines. Always verify critical information directly on official government portals before making decisions.
+                Note: Analysis is evaluated strictly against official policy documents and guidelines. Always verify critical decisions directly on official government portals.
               </div>
             </div>
           )}
