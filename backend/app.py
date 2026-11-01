@@ -5,6 +5,14 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from groq import Groq, APIError, RateLimitError, APIConnectionError, AuthenticationError
+from rag import (
+    ingest_pdf_document,
+    answer_question_from_document,
+    verify_claim_against_document,
+    get_metadata as get_doc_metadata,
+    list_all_documents,
+    document_exists
+)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -16,15 +24,18 @@ load_dotenv(os.path.join(basedir, ".env"))
 load_dotenv()
 
 app = Flask(__name__)
-# Enable CORS for frontend requests
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# CORS — allow all origins (safe since auth uses Bearer tokens, not cookies)
+CORS(app, resources={r"/api/*": {"origins": "*"}},
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # ----- Auth routes -----
 from auth_routes import api as auth_bp
 app.register_blueprint(auth_bp, url_prefix="/api")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-8b-8192").strip()
 
 # Primary Government Schemes Context for Saathi AI
 SCHEMES_CONTEXT = """You are Saathi AI — an expert AI companion for Indian government schemes and civic policies.
@@ -169,7 +180,7 @@ def chat():
         if m["role"] != "system":
             messages_payload.append(m)
 
-    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "qwen/qwen3.8-27b"
+    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "llama3-8b-8192"
 
     try:
         client = get_groq_client()
@@ -231,7 +242,7 @@ def chat():
 
 @app.route("/api/verify", methods=["POST"])
 def verify_claim():
-    """Verify policy claim endpoint using Groq."""
+    """Verify policy claim endpoint using Groq and optional RAG document grounding."""
     data = request.get_json(silent=True)
     if not data or "claim" not in data:
         return jsonify({"error": "Missing 'claim' in request body."}), 400
@@ -240,8 +251,91 @@ def verify_claim():
     if not claim:
         return jsonify({"error": "Claim text cannot be empty."}), 400
 
-    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "qwen/qwen3.8-27b"
+    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "llama3-8b-8192"
 
+    # Stage 2: RAG-Grounded Claim Verification if document_id is provided in request
+    if "document_id" in data:
+        raw_doc_id = data.get("document_id")
+        doc_id = str(raw_doc_id).strip() if raw_doc_id is not None else ""
+
+        # Missing or empty document_id: never generate VERIFIED or FALSE
+        if not doc_id:
+            return jsonify({
+                "error": "Missing or empty 'document_id'. Please select a valid document for verification.",
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": "No document ID was provided for verification.",
+                    "source": "N/A"
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": []
+            }), 400
+
+        # Invalid document_id: never generate VERIFIED or FALSE
+        if not document_exists(doc_id):
+            return jsonify({
+                "error": f"Document '{doc_id}' not found.",
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": f"Document '{doc_id}' does not exist on the server.",
+                    "source": "N/A"
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": []
+            }), 404
+
+        # Document exists -> verify strictly against this document
+        try:
+            client = get_groq_client()
+        except Exception as e:
+            logger.error(f"Groq client unavailable: {e}")
+            meta = get_doc_metadata(doc_id) or {}
+            filename = meta.get("filename", "document.pdf")
+            return jsonify({
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": "Verification service unavailable at this moment. Please check official government portals.",
+                    "source": filename
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": [],
+                "document_id": doc_id,
+                "filename": filename
+            }), 200
+
+        try:
+            result = verify_claim_against_document(
+                doc_id=doc_id,
+                claim=claim,
+                groq_client=client,
+                model_name=model_name
+            )
+            return jsonify(result), 200
+        except Exception as e:
+            logger.exception(f"Error in verify_claim_against_document for doc {doc_id}")
+            meta = get_doc_metadata(doc_id) or {}
+            filename = meta.get("filename", "document.pdf")
+            return jsonify({
+                "subClaims": [{
+                    "text": claim,
+                    "verdict": "UNVERIFIABLE",
+                    "evidence": "An error occurred while verifying the claim against the document.",
+                    "source": filename
+                }],
+                "overall": "unverifiable",
+                "sufficient_evidence": False,
+                "citations": [],
+                "document_id": doc_id,
+                "filename": filename
+            }), 200
+
+    # Backwards compatibility: General scheme verification when document_id is not specified in request
     prompt = f"""You are a fact-checker for Indian government schemes.
 
 Claim to verify: "{claim}"
@@ -306,6 +400,110 @@ Respond strictly in valid JSON format with this exact structure:
             }],
             "overall": "unverifiable"
         }), 200
+
+
+# ─── Document RAG Endpoints ──────────────────────────────────────────
+
+@app.route("/api/documents/upload", methods=["POST"])
+def upload_document():
+    """Upload and process an official PDF document for source-grounded RAG."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded. Please provide a PDF file."}), 400
+
+    file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"error": "Empty filename."}), 400
+
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Only PDF files are supported."}), 400
+
+    try:
+        metadata = ingest_pdf_document(file.stream, file.filename)
+        return jsonify({
+            "status": "success",
+            "message": "Document processed and indexed successfully.",
+            "document": metadata
+        }), 201
+    except ValueError as ve:
+        logger.warning(f"Validation error during PDF upload: {ve}")
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        logger.exception("Unexpected error during document ingestion")
+        return jsonify({"error": "An internal error occurred while processing the PDF."}), 500
+
+
+@app.route("/api/documents/ask", methods=["POST"])
+def ask_document():
+    """Ask a question about an uploaded document with source citations."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request. JSON body expected."}), 400
+
+    doc_id = str(data.get("document_id", "")).strip()
+    question = str(data.get("question", "")).strip()
+
+    if not doc_id:
+        return jsonify({"error": "Missing 'document_id' in request."}), 400
+
+    if not question:
+        return jsonify({"error": "Missing 'question' in request."}), 400
+
+    if not document_exists(doc_id):
+        return jsonify({"error": f"Document '{doc_id}' not found. Please upload the document first."}), 404
+
+    try:
+        client = get_groq_client()
+    except ValueError as ve:
+        logger.error(f"Configuration error: {ve}")
+        return jsonify({
+            "error": "The AI assistant is temporarily unavailable because the backend API key is not configured.",
+            "details": "Please set GROQ_API_KEY in the backend environment."
+        }), 503
+
+    model_name = os.getenv("GROQ_MODEL", GROQ_MODEL).strip() or "qwen/qwen3.8-27b"
+
+    try:
+        result = answer_question_from_document(
+            doc_id=doc_id,
+            question=question,
+            groq_client=client,
+            model_name=model_name
+        )
+        return jsonify(result), 200
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except FileNotFoundError:
+        return jsonify({"error": "Document not found."}), 404
+    except Exception as e:
+        logger.exception("Error answering question from document")
+        return jsonify({"error": "Failed to generate answer from document."}), 500
+
+
+@app.route("/api/documents/<doc_id>", methods=["GET"])
+def get_document(doc_id):
+    """Retrieve safe metadata for a specific document."""
+    if not document_exists(doc_id):
+        return jsonify({"error": "Document not found."}), 404
+
+    meta = get_doc_metadata(doc_id)
+    if not meta:
+        return jsonify({"error": "Document metadata unavailable."}), 404
+
+    return jsonify({
+        "status": "success",
+        "document": meta
+    }), 200
+
+
+@app.route("/api/documents", methods=["GET"])
+def list_documents():
+    """List all available indexed documents."""
+    docs = list_all_documents()
+    return jsonify({
+        "status": "success",
+        "count": len(docs),
+        "documents": docs
+    }), 200
 
 
 if __name__ == "__main__":
