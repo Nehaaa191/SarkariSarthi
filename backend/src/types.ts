@@ -1,7 +1,6 @@
 export interface User {
   id: string;
   email?: string;
-  phone?: string;
   name?: string;
   avatar?: string;
   googleId?: string;
@@ -22,4 +21,5 @@ export interface JwtUserPayload {
   exp?: number;
 }
 
-export type IdentifierType = 'email' | 'phone';
+// Only email OTP is supported — phone/SMS has been removed
+export type IdentifierType = 'email';

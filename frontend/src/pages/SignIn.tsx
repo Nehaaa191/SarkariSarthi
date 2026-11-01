@@ -8,39 +8,30 @@ import {
   type ClipboardEvent,
 } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mail, AlertCircle } from 'lucide-react';
 import { useAuth, type User } from '../context/AuthContext';
 import { useI18n } from '../i18n/context';
 import { api } from '../lib/api';
 import './SignIn.css';
 
 type AuthScreen = 'identify' | 'otp';
-type AuthTab = 'email' | 'phone';
 
-function maskIdentifier(id: string, type: AuthTab): string {
-  if (type === 'email') {
-    const atIndex = id.indexOf('@');
-    if (atIndex > 1) {
-      return `${id[0]}***${id.slice(atIndex)}`;
-    }
-    return id;
-  } else {
-    const digits = id.replace(/\D/g, '');
-    const last4 = digits.slice(-4);
-    return `+91 XXXXXX${last4}`;
+function maskEmail(email: string): string {
+  const atIndex = email.indexOf('@');
+  if (atIndex > 1) {
+    return `${email[0]}***${email.slice(atIndex)}`;
   }
+  return email;
 }
 
 export default function SignIn() {
   const { login } = useAuth();
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [screen, setScreen] = useState<AuthScreen>('identify');
-  const [activeTab, setActiveTab] = useState<AuthTab>('email');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [currentIdentifier, setCurrentIdentifier] = useState('');
   const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -53,11 +44,11 @@ export default function SignIn() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('error') === 'google_failed') {
-      setError('Google sign-in was unsuccessful. Please try again or use email/phone.');
+      setError('Google sign-in was unsuccessful. Please try again or use email OTP.');
     }
   }, [location.search]);
 
-  // Handle countdown timer for OTP screen
+  // Countdown timer on OTP screen
   useEffect(() => {
     if (screen !== 'otp' || countdown <= 0) return;
     const interval = setInterval(() => {
@@ -66,7 +57,7 @@ export default function SignIn() {
     return () => clearInterval(interval);
   }, [screen, countdown]);
 
-  // Focus the first OTP input when switching to OTP screen
+  // Focus first OTP input when entering OTP screen
   useEffect(() => {
     if (screen === 'otp') {
       const timer = setTimeout(() => {
@@ -77,8 +68,7 @@ export default function SignIn() {
   }, [screen]);
 
   const handleGoogleSignIn = () => {
-    // Use a relative URL so the request goes through the Vite proxy → backend.
-    // This avoids hardcoding the backend port and works in any environment.
+    // Relative URL — routed through the Vite proxy → backend
     window.location.href = '/auth/google';
   };
 
@@ -86,31 +76,20 @@ export default function SignIn() {
     e.preventDefault();
     setError(null);
 
-    let identifierToSend = '';
-    if (activeTab === 'email') {
-      const cleanEmail = email.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!cleanEmail || !emailRegex.test(cleanEmail)) {
-        setError(t.auth.errorInvalid);
-        return;
-      }
-      identifierToSend = cleanEmail;
-    } else {
-      const cleanDigits = phone.replace(/\D/g, '');
-      if (cleanDigits.length !== 10) {
-        setError(t.auth.errorInvalid);
-        return;
-      }
-      identifierToSend = `+91${cleanDigits}`;
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
+      return;
     }
 
     setLoading(true);
     try {
-      await api.post<{ success: boolean; message: string; type: 'email' | 'phone' }>(
+      await api.post<{ success: boolean; message: string; type: string }>(
         '/auth/send-otp',
-        { identifier: identifierToSend }
+        { identifier: cleanEmail }
       );
-      setCurrentIdentifier(identifierToSend);
+      setCurrentIdentifier(cleanEmail);
       setOtp(['', '', '', '', '', '']);
       setCountdown(60);
       setScreen('otp');
@@ -127,7 +106,6 @@ export default function SignIn() {
     updated[index] = digit;
     setOtp(updated);
     setError(null);
-
     if (digit && index < 5) {
       otpInputsRef.current[index + 1]?.focus();
     }
@@ -156,16 +134,13 @@ export default function SignIn() {
     e.preventDefault();
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     if (!pasted) return;
-
     const updated = [...otp];
     for (let i = 0; i < 6; i++) {
       updated[i] = pasted[i] || '';
     }
     setOtp(updated);
     setError(null);
-
-    const nextIndex = Math.min(pasted.length, 5);
-    otpInputsRef.current[nextIndex]?.focus();
+    otpInputsRef.current[Math.min(pasted.length, 5)]?.focus();
   };
 
   const handleVerifySubmit = async (e: FormEvent) => {
@@ -186,7 +161,7 @@ export default function SignIn() {
         otp: code,
       });
 
-      if (res && res.accessToken && res.user) {
+      if (res?.accessToken && res?.user) {
         login(res.accessToken, res.user);
         const redirectPath = (location.state as any)?.from || '/dashboard';
         navigate(redirectPath, { replace: true });
@@ -204,7 +179,6 @@ export default function SignIn() {
     if (countdown > 0 || loading) return;
     setLoading(true);
     setError(null);
-
     try {
       await api.post('/auth/send-otp', { identifier: currentIdentifier });
       setCountdown(60);
@@ -224,14 +198,6 @@ export default function SignIn() {
   };
 
   const isOtpComplete = otp.every((d) => d.length === 1);
-  const typeLabel =
-    activeTab === 'email'
-      ? lang === 'hi'
-        ? 'ईमेल'
-        : 'email'
-      : lang === 'hi'
-      ? 'फ़ोन'
-      : 'phone';
 
   return (
     <div className="signin-page">
@@ -302,7 +268,7 @@ export default function SignIn() {
                   <p className="auth-subtitle">{t.auth.sub}</p>
                 </div>
 
-                {/* Google Sign-In button */}
+                {/* Google Sign-In */}
                 <button
                   type="button"
                   className="btn-google"
@@ -334,79 +300,41 @@ export default function SignIn() {
                   <span>{t.auth.orDivider}</span>
                 </div>
 
-                {/* Tabs */}
+                {/* Email label */}
                 <div className="auth-tabs" role="tablist">
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={activeTab === 'email'}
-                    className={`auth-tab-btn ${activeTab === 'email' ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveTab('email');
-                      setError(null);
-                    }}
+                    aria-selected={true}
+                    className="auth-tab-btn active"
                     id="auth-tab-email"
                   >
                     <Mail size={15} />
                     <span>{t.auth.emailTab}</span>
                   </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'phone'}
-                    className={`auth-tab-btn ${activeTab === 'phone' ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveTab('phone');
-                      setError(null);
-                    }}
-                    id="auth-tab-phone"
-                  >
-                    <Phone size={15} />
-                    <span>{t.auth.phoneTab}</span>
-                  </button>
                 </div>
 
-                {/* Identify Form */}
+                {/* Email form */}
                 <form onSubmit={handleIdentifySubmit}>
                   <div className="auth-input-group">
-                    {activeTab === 'email' ? (
-                      <input
-                        type="email"
-                        className="auth-input"
-                        placeholder={t.auth.emailPlaceholder}
-                        value={email}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                          setEmail(e.target.value);
-                          setError(null);
-                        }}
-                        autoFocus
-                        id="auth-email-input"
-                      />
-                    ) : (
-                      <div className="phone-input-container">
-                        <span className="phone-prefix">+91</span>
-                        <input
-                          type="tel"
-                          className="phone-input"
-                          placeholder={t.auth.phonePlaceholder}
-                          value={phone}
-                          maxLength={10}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                            setPhone(val);
-                            setError(null);
-                          }}
-                          autoFocus
-                          id="auth-phone-input"
-                        />
-                      </div>
-                    )}
+                    <input
+                      type="email"
+                      className="auth-input"
+                      placeholder={t.auth.emailPlaceholder}
+                      value={email}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                        setEmail(e.target.value);
+                        setError(null);
+                      }}
+                      autoFocus
+                      id="auth-email-input"
+                    />
                   </div>
 
                   <button
                     type="submit"
                     className="btn-auth-submit"
-                    disabled={loading || (activeTab === 'email' ? !email.trim() : !phone.trim())}
+                    disabled={loading || !email.trim()}
                     id="auth-continue-btn"
                   >
                     {loading ? <div className="btn-spinner" /> : t.auth.continueBtn}
@@ -435,19 +363,17 @@ export default function SignIn() {
                     <ArrowLeft size={18} />
                   </button>
                   <div>
-                    <h2 className="auth-title">
-                      {t.auth.verifyHeading.replace('{type}', typeLabel)}
-                    </h2>
+                    <h2 className="auth-title">Verify your email</h2>
                     <p className="auth-subtitle">
                       {t.auth.verifySub}{' '}
                       <span className="auth-identifier-pill">
-                        {maskIdentifier(currentIdentifier, activeTab)}
+                        {maskEmail(currentIdentifier)}
                       </span>
                     </p>
                   </div>
                 </div>
 
-                {/* OTP Form */}
+                {/* OTP inputs */}
                 <form onSubmit={handleVerifySubmit}>
                   <div className="otp-inputs-grid" onPaste={handleOtpPaste}>
                     {otp.map((val, idx) => (

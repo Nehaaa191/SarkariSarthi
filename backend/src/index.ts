@@ -1,5 +1,6 @@
-import dotenv from 'dotenv';
-dotenv.config();
+// env.ts MUST be the first import — it calls dotenv.config() before any
+// other module reads process.env (including passport.ts).
+import './env';
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -62,6 +63,7 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`[SarkariSaathi Backend] Server running on http://localhost:${PORT}`);
     console.log(`[SarkariSaathi Backend] Allowed frontend origins:`, allowedOrigins);
     console.log(`[SarkariSaathi Backend] NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`[SarkariSaathi Backend] Google OAuth: ${process.env.GOOGLE_CLIENT_ID ? '✅ configured' : '⚠️  missing'}`);
   });
 
   // Gracefully handle port already in use errors

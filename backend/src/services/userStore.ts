@@ -18,16 +18,6 @@ export class UserStore {
     return undefined;
   }
 
-  findByPhone(phone: string): User | undefined {
-    const normalized = phone.trim();
-    for (const user of this.users.values()) {
-      if (user.phone && user.phone.trim() === normalized) {
-        return user;
-      }
-    }
-    return undefined;
-  }
-
   findByGoogleId(googleId: string): User | undefined {
     for (const user of this.users.values()) {
       if (user.googleId === googleId) {

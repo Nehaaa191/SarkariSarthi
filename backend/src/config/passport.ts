@@ -3,9 +3,17 @@ import { Strategy as GoogleStrategy, Profile, VerifyCallback } from 'passport-go
 import { userStore } from '../services/userStore';
 import { User } from '../types';
 
-const clientID = process.env.GOOGLE_CLIENT_ID || 'placeholder_client_id';
-const clientSecret = process.env.GOOGLE_CLIENT_SECRET || 'placeholder_client_secret';
-const callbackURL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback';
+const clientID = process.env.GOOGLE_CLIENT_ID;
+const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const callbackURL = process.env.GOOGLE_CALLBACK_URL;
+
+if (!clientID || !clientSecret) {
+  throw new Error('Google OAuth credentials are missing from .env');
+}
+
+if (!callbackURL) {
+  throw new Error('GOOGLE_CALLBACK_URL is missing from .env');
+}
 
 passport.use(
   new GoogleStrategy(
