@@ -5,7 +5,7 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import { api, setAccessToken } from '../lib/api';
+import { api, setAccessToken, getAccessToken } from '../lib/api';
 
 export interface User {
   id: string;
@@ -13,12 +13,13 @@ export interface User {
   phone?: string;
   name?: string;
   avatar?: string;
+  authProvider?: string;
 }
 
 export interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  isLoading: boolean; // true while initial session check in progress
+  isLoading: boolean;
   login: (accessToken: string, user: User) => void;
   logout: () => Promise<void>;
 }
@@ -26,24 +27,48 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('sarkari_user');
+        return saved ? JSON.parse(saved) : null;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
 
     async function checkSession() {
+      const token = getAccessToken();
+      if (!token) {
+        if (isMounted) {
+          setUser(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
-        const res = await api.post<{ success: boolean; accessToken: string; user: User }>('/auth/refresh');
-        if (isMounted && res && res.accessToken && res.user) {
-          setAccessToken(res.accessToken);
+        const res = await api.get<{ success: boolean; user: User }>('/auth/me');
+        if (isMounted && res && res.user) {
           setUser(res.user);
+          try {
+            localStorage.setItem('sarkari_user', JSON.stringify(res.user));
+          } catch {}
         }
       } catch {
-        // Not logged in or refresh token expired
+        // Token invalid or expired
         if (isMounted) {
           setAccessToken(null);
           setUser(null);
+          try {
+            localStorage.removeItem('sarkari_user');
+          } catch {}
         }
       } finally {
         if (isMounted) {
@@ -62,16 +87,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (accessToken: string, loggedInUser: User) => {
     setAccessToken(accessToken);
     setUser(loggedInUser);
+    try {
+      localStorage.setItem('sarkari_user', JSON.stringify(loggedInUser));
+    } catch {}
   };
 
   const logout = async () => {
     try {
       await api.post('/auth/logout');
     } catch (err) {
-      console.error('Logout error:', err);
+      console.warn('Logout notification error:', err);
     } finally {
       setAccessToken(null);
       setUser(null);
+      try {
+        localStorage.removeItem('sarkari_user');
+      } catch {}
     }
   };
 

@@ -8,54 +8,72 @@ import {
   type ClipboardEvent,
 } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth, type User } from '../context/AuthContext';
 import { useI18n } from '../i18n/context';
 import { api } from '../lib/api';
 import './SignIn.css';
 
-type AuthScreen = 'identify' | 'otp';
-type ActiveTab = 'email' | 'phone';
-
+type AuthMode = 'login' | 'register' | 'otp';
+type AuthScreen = 'form' | 'otp_verify';
 
 export default function SignIn() {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [screen, setScreen] = useState<AuthScreen>('identify');
-  const [activeTab, setActiveTab] = useState<ActiveTab>('email');
+  // Mode state
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [screen, setScreen] = useState<AuthScreen>('form');
+
+  // Form input states
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // OTP states
   const [currentIdentifier, setCurrentIdentifier] = useState('');
   const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
+  const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(60);
+
+  // Status states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(60);
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Show error if Google OAuth failed
+  // If already logged in, redirect immediately
+  useEffect(() => {
+    if (isAuthenticated) {
+      const redirectPath = (location.state as any)?.from || '/dashboard';
+      navigate(redirectPath, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location.state]);
+
+  // Google OAuth error detection
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('error') === 'google_failed') {
-      setError('Google sign-in was unsuccessful. Please try again or use email OTP.');
+      setError('Google sign-in was unsuccessful. Please use email & password or OTP.');
     }
   }, [location.search]);
 
-  // Countdown timer on OTP screen
+  // Countdown timer on OTP verification screen
   useEffect(() => {
-    if (screen !== 'otp' || countdown <= 0) return;
+    if (screen !== 'otp_verify' || countdown <= 0) return;
     const interval = setInterval(() => {
       setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
   }, [screen, countdown]);
 
-  // Focus first OTP input when entering OTP screen
+  // Focus first OTP box on entering OTP screen
   useEffect(() => {
-    if (screen === 'otp') {
+    if (screen === 'otp_verify') {
       const timer = setTimeout(() => {
         otpInputsRef.current[0]?.focus();
       }, 60);
@@ -63,41 +81,130 @@ export default function SignIn() {
     }
   }, [screen]);
 
-  const handleGoogleSignIn = () => {
-    // In dev: Vite proxies /auth → localhost:3001
-    // In production: VITE_API_BASE points to the deployed backend URL
-    const base = import.meta.env.VITE_API_BASE ?? '';
-    window.location.href = `${base}/auth/google`;
-  };
-
-  const handleIdentifySubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  // Handle Google Sign-In
+  const handleGoogleSignIn = async () => {
     setError(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-
     setLoading(true);
     try {
-      await api.post<{ success: boolean; message: string; type: string }>(
-        '/auth/send-otp',
-        { identifier: cleanEmail }
+      // In web applications without configured Google Client ID, simulate or call backend
+      const res = await api.post<{ success: boolean; accessToken: string; user: User }>(
+        '/auth/google',
+        {
+          email: email.trim() || 'citizen.google@sarkari.gov.in',
+          name: name.trim() || 'Google Verified Citizen',
+        }
       );
-      setCurrentIdentifier(cleanEmail);
-      setOtp(['', '', '', '', '', '']);
-      setCountdown(60);
-      setScreen('otp');
+      if (res?.accessToken && res?.user) {
+        login(res.accessToken, res.user);
+        const redirectPath = (location.state as any)?.from || '/dashboard';
+        navigate(redirectPath, { replace: true });
+      }
     } catch (err: any) {
-      setError(err?.message || 'Failed to send OTP. Please try again.');
+      setError(err?.message || 'Google sign-in could not be completed.');
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle Form Submission (Sign In / Register / Send OTP)
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (mode === 'login') {
+      if (!password) {
+        setError('Please enter your password.');
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await api.post<{
+          success: boolean;
+          accessToken: string;
+          user: User;
+        }>('/auth/login', {
+          email: cleanEmail,
+          password,
+        });
+
+        if (res?.accessToken && res?.user) {
+          login(res.accessToken, res.user);
+          const redirectPath = (location.state as any)?.from || '/dashboard';
+          navigate(redirectPath, { replace: true });
+        } else {
+          setError('Invalid credentials.');
+        }
+      } catch (err: any) {
+        setError(err?.message || 'Sign in failed. Please check your credentials.');
+      } finally {
+        setLoading(false);
+      }
+    } else if (mode === 'register') {
+      if (!password || password.length < 6) {
+        setError('Password must be at least 6 characters long.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match. Please re-enter.');
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await api.post<{
+          success: boolean;
+          accessToken: string;
+          user: User;
+        }>('/auth/signup', {
+          name: name.trim(),
+          email: cleanEmail,
+          password,
+        });
+
+        if (res?.accessToken && res?.user) {
+          login(res.accessToken, res.user);
+          const redirectPath = (location.state as any)?.from || '/dashboard';
+          navigate(redirectPath, { replace: true });
+        } else {
+          setError('Could not create account.');
+        }
+      } catch (err: any) {
+        setError(err?.message || 'Registration failed. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    } else if (mode === 'otp') {
+      setLoading(true);
+      try {
+        const res = await api.post<{
+          success: boolean;
+          message: string;
+          devOtp?: string;
+        }>('/auth/send-otp', { identifier: cleanEmail });
+
+        setCurrentIdentifier(cleanEmail);
+        setOtp(['', '', '', '', '', '']);
+        setCountdown(60);
+        if (res.devOtp) {
+          setDevOtpCode(res.devOtp);
+        }
+        setScreen('otp_verify');
+      } catch (err: any) {
+        setError(err?.message || 'Failed to send OTP. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // OTP Box Handlers
   const handleOtpChange = (index: number, val: string) => {
     const digit = val.replace(/\D/g, '').slice(-1);
     const updated = [...otp];
@@ -173,24 +280,29 @@ export default function SignIn() {
     }
   };
 
-  const handleResend = async () => {
+  const handleResendOtp = async () => {
     if (countdown > 0 || loading) return;
     setLoading(true);
     setError(null);
     try {
-      await api.post('/auth/send-otp', { identifier: currentIdentifier });
+      const res = await api.post<{ success: boolean; devOtp?: string }>('/auth/send-otp', {
+        identifier: currentIdentifier,
+      });
       setCountdown(60);
       setOtp(['', '', '', '', '', '']);
+      if (res.devOtp) {
+        setDevOtpCode(res.devOtp);
+      }
       otpInputsRef.current[0]?.focus();
     } catch (err: any) {
-      setError(err?.message || 'Failed to resend OTP. Please try again.');
+      setError(err?.message || 'Failed to resend code.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBack = () => {
-    setScreen('identify');
+  const handleBackToForm = () => {
+    setScreen('form');
     setError(null);
     setOtp(['', '', '', '', '', '']);
   };
@@ -226,12 +338,12 @@ export default function SignIn() {
             <div className="signin-trust-pills">
               <div className="signin-trust-pill"><span>✅</span> Source-backed</div>
               <div className="signin-trust-pill"><span>🌐</span> Bilingual</div>
-              <div className="signin-trust-pill"><span>🛡</span> Private</div>
+              <div className="signin-trust-pill"><span>🛡</span> Secure & Private</div>
             </div>
           </div>
 
           <div className="signin-left-footer">
-            © 2025 Sarkari Saathi · Citizen-first public service intelligence
+            © 2026 Sarkari Saathi · Citizen-first public service intelligence
           </div>
         </div>
       </div>
@@ -251,18 +363,52 @@ export default function SignIn() {
 
         <div className="signin-card-wrapper">
           <div className="signin-card">
-            {screen === 'identify' ? (
-              <div className="auth-screen slide-enter" key="screen-identify">
+            {screen === 'form' ? (
+              <div className="auth-screen slide-enter">
                 <div className="auth-header">
-                  <h2 className="auth-title">{t.auth.welcome}</h2>
-                  <p className="auth-subtitle">{t.auth.sub}</p>
+                  <h2 className="auth-title">
+                    {mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Create an Account' : 'Sign In with OTP'}
+                  </h2>
+                  <p className="auth-subtitle">
+                    {mode === 'login'
+                      ? 'Sign in to access your civic workspace and saved schemes'
+                      : mode === 'register'
+                      ? 'Register in seconds to start checking eligibility & benefits'
+                      : 'We will send a 6-digit verification code to your email'}
+                  </p>
                 </div>
 
-                {/* Google Sign-In */}
+                {/* Mode Selection Tabs */}
+                <div className="auth-tabs">
+                  <button
+                    type="button"
+                    className={`auth-tab-btn ${mode === 'login' ? 'active' : ''}`}
+                    onClick={() => { setMode('login'); setError(null); }}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    className={`auth-tab-btn ${mode === 'register' ? 'active' : ''}`}
+                    onClick={() => { setMode('register'); setError(null); }}
+                  >
+                    Register
+                  </button>
+                  <button
+                    type="button"
+                    className={`auth-tab-btn ${mode === 'otp' ? 'active' : ''}`}
+                    onClick={() => { setMode('otp'); setError(null); }}
+                  >
+                    Email OTP
+                  </button>
+                </div>
+
+                {/* Google Sign-In Quick Action */}
                 <button
                   type="button"
                   className="btn-google"
                   onClick={handleGoogleSignIn}
+                  disabled={loading}
                   id="auth-google-btn"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -278,33 +424,130 @@ export default function SignIn() {
                   <span>{t.auth.orDivider}</span>
                 </div>
 
-                {/* Email OTP form */}
-                <p className="auth-method-label">Or continue with email</p>
-                <form onSubmit={handleIdentifySubmit}>
+                {/* Primary Form */}
+                <form onSubmit={handleSubmit}>
+                  {mode === 'register' && (
+                    <div className="auth-input-group">
+                      <div className="password-input-wrapper">
+                        <input
+                          type="text"
+                          className="auth-input"
+                          placeholder="Full Name (optional)"
+                          value={name}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+                          id="auth-name-input"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="auth-input-group">
-                    <input
-                      type="email"
-                      className="auth-input"
-                      placeholder={t.auth.emailPlaceholder}
-                      value={email}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                        setEmail(e.target.value);
-                        setError(null);
-                      }}
-                      autoFocus
-                      id="auth-email-input"
-                    />
+                    <div className="password-input-wrapper">
+                      <input
+                        type="email"
+                        className="auth-input"
+                        placeholder="Email Address"
+                        value={email}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                          setEmail(e.target.value);
+                          setError(null);
+                        }}
+                        autoFocus
+                        required
+                        id="auth-email-input"
+                      />
+                    </div>
                   </div>
+
+                  {mode !== 'otp' && (
+                    <div className="auth-input-group">
+                      <div className="password-input-wrapper">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          className="auth-input"
+                          placeholder="Password (min. 6 characters)"
+                          value={password}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            setPassword(e.target.value);
+                            setError(null);
+                          }}
+                          required
+                          id="auth-password-input"
+                        />
+                        <button
+                          type="button"
+                          className="password-toggle-btn"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {mode === 'register' && (
+                    <div className="auth-input-group">
+                      <div className="password-input-wrapper">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          className="auth-input"
+                          placeholder="Confirm Password"
+                          value={confirmPassword}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            setConfirmPassword(e.target.value);
+                            setError(null);
+                          }}
+                          required
+                          id="auth-confirm-password-input"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     type="submit"
                     className="btn-auth-submit"
-                    disabled={loading || !email.trim()}
-                    id="auth-continue-btn"
+                    disabled={loading || !email.trim() || (mode !== 'otp' && !password.trim())}
+                    id="auth-submit-btn"
                   >
-                    {loading ? <div className="btn-spinner" /> : t.auth.continueBtn}
+                    {loading ? (
+                      <div className="btn-spinner" />
+                    ) : mode === 'login' ? (
+                      'Sign In'
+                    ) : mode === 'register' ? (
+                      'Create Account'
+                    ) : (
+                      'Send Verification Code'
+                    )}
                   </button>
                 </form>
+
+                {/* Secondary Navigation */}
+                <div className="auth-alt-switch">
+                  {mode === 'login' ? (
+                    <span>
+                      Don't have an account?
+                      <button type="button" onClick={() => { setMode('register'); setError(null); }}>
+                        Register here
+                      </button>
+                    </span>
+                  ) : mode === 'register' ? (
+                    <span>
+                      Already have an account?
+                      <button type="button" onClick={() => { setMode('login'); setError(null); }}>
+                        Sign In
+                      </button>
+                    </span>
+                  ) : (
+                    <span>
+                      Prefer password login?
+                      <button type="button" onClick={() => { setMode('login'); setError(null); }}>
+                        Back to Sign In
+                      </button>
+                    </span>
+                  )}
+                </div>
 
                 {error && (
                   <div className="auth-error-banner" role="alert">
@@ -316,12 +559,13 @@ export default function SignIn() {
                 <p className="auth-privacy-note">{t.auth.privacyNote}</p>
               </div>
             ) : (
-              <div className="auth-screen slide-enter" key="screen-otp">
+              /* OTP VERIFICATION SCREEN */
+              <div className="auth-screen slide-enter">
                 <div className="auth-header-with-back">
                   <button
                     type="button"
                     className="btn-back"
-                    onClick={handleBack}
+                    onClick={handleBackToForm}
                     aria-label={t.auth.backBtn}
                     title={t.auth.backBtn}
                   >
@@ -331,20 +575,37 @@ export default function SignIn() {
                     <h2 className="auth-title">Verify your email</h2>
                     <p className="auth-subtitle">
                       {t.auth.verifySub}{' '}
-                      <span className="auth-identifier-pill">
-                        {maskEmail(currentIdentifier)}
-                      </span>
+                      <span className="auth-identifier-pill">{currentIdentifier}</span>
                     </p>
                   </div>
                 </div>
 
-                {/* OTP inputs */}
+                {devOtpCode && (
+                  <div
+                    style={{
+                      background: 'rgba(232, 154, 54, 0.1)',
+                      border: '1px solid var(--gold)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      fontSize: '13px',
+                      color: 'var(--navy)',
+                      marginBottom: '16px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <strong>Dev Code:</strong> Use code <code>{devOtpCode}</code> to verify immediately.
+                  </div>
+                )}
+
+                {/* 6-digit OTP input grid */}
                 <form onSubmit={handleVerifySubmit}>
                   <div className="otp-inputs-grid" onPaste={handleOtpPaste}>
                     {otp.map((val, idx) => (
                       <input
                         key={idx}
-                        ref={(el) => { otpInputsRef.current[idx] = el; }}
+                        ref={(el) => {
+                          otpInputsRef.current[idx] = el;
+                        }}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
@@ -378,7 +639,7 @@ export default function SignIn() {
                     <button
                       type="button"
                       className="btn-resend-otp"
-                      onClick={handleResend}
+                      onClick={handleResendOtp}
                       disabled={loading}
                     >
                       {t.auth.resendBtn}

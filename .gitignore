@@ -41,3 +41,8 @@ backend/data/
 *.npy
 *.pdf
 
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3

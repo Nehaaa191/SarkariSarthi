@@ -25,14 +25,19 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# CORS — allow all origins (safe since auth uses Bearer tokens, not cookies)
-CORS(app, resources={r"/api/*": {"origins": "*"}},
+# Initialize database
+from db import init_db
+init_db(app)
+
+# CORS — allow all origins for both /api/* and /auth/* (safe since auth uses Bearer tokens, not cookies)
+CORS(app, resources={r"/*": {"origins": "*"}},
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-# ----- Auth routes -----
+# ----- Auth routes (registered at both /api and root for maximum frontend compatibility) -----
 from auth_routes import api as auth_bp
 app.register_blueprint(auth_bp, url_prefix="/api")
+app.register_blueprint(auth_bp, url_prefix="", name="auth_root")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-8b-8192").strip()
@@ -266,9 +271,7 @@ def verify_claim():
         "bbbp": "Beti Bachao Beti Padhao / Sukanya Samriddhi: savings scheme for girl child.",
         "nsp": "National Scholarship Portal: centralised scholarship portal for SC/ST/OBC/minority students."
     }
-    scheme_block = f"
-Selected scheme context: {SCHEME_KNOWLEDGE.get(scheme_context, '')}
-" if scheme_context and scheme_context in SCHEME_KNOWLEDGE else ""
+    scheme_block = f"\nSelected scheme context: {SCHEME_KNOWLEDGE.get(scheme_context, '')}\n" if scheme_context and scheme_context in SCHEME_KNOWLEDGE else ""
 
     prompt = f"""You are a fact‑checker for Indian government schemes.
 
